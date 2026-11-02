@@ -71,7 +71,7 @@ print("✅ API keys loaded successfully!\n")
 
 try:
     llm = ChatGoogleGenerativeAI(
-        model="gemini-3.8-flash",
+        model="gemini-3.6-flash",
         google_api_key=gemini_key,
         temperature=0.7,
         timeout=30

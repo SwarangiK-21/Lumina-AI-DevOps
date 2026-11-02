@@ -285,7 +285,7 @@ with st.sidebar:
     st.markdown("""
     **Orchestration:** LangGraph
     
-    **LLM:** Google Gemini 3.8 Flash
+    **LLM:** Google Gemini 3.6 Flash
     
     **Search:** Tavily AI
     """)
