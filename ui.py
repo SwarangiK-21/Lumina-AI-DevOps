@@ -44,7 +44,6 @@ st.markdown("""
         font-family: 'Inter', sans-serif;
     }
     
-    /* SIDEBAR */
     [data-testid="stSidebar"] {
         background: linear-gradient(180deg, #fdfbf8 0%, #f5f1ed 100%);
         border-right: 2px solid var(--border-light);
@@ -54,7 +53,6 @@ st.markdown("""
         color: var(--text-dark);
     }
     
-    /* MAIN HEADER */
     .main-header {
         font-family: 'Space Grotesk', sans-serif;
         font-size: 3.5rem;
@@ -72,7 +70,6 @@ st.markdown("""
         letter-spacing: 1px;
     }
     
-    /* INPUT AREA */
     .stTextArea textarea {
         font-family: 'JetBrains Mono', monospace !important;
         font-size: 0.95rem !important;
@@ -89,7 +86,6 @@ st.markdown("""
         box-shadow: 0 0 0 4px rgba(0, 102, 204, 0.1) !important;
     }
     
-    /* BUTTON */
     .stButton > button {
         font-family: 'Space Grotesk', sans-serif;
         font-size: 1rem;
@@ -109,7 +105,6 @@ st.markdown("""
         box-shadow: 0 8px 25px rgba(0, 102, 204, 0.3) !important;
     }
     
-    /* METRIC CARDS */
     [data-testid="metric-container"] {
         background: white !important;
         border-radius: 14px !important;
@@ -138,7 +133,6 @@ st.markdown("""
         font-size: 0.95rem !important;
     }
     
-    /* SECTION HEADERS */
     .stMarkdown h3 {
         font-family: 'Space Grotesk', sans-serif !important;
         font-size: 1.3rem !important;
@@ -147,7 +141,6 @@ st.markdown("""
         margin: 1.5rem 0 1rem 0 !important;
     }
     
-    /* EXPANDERS */
     .streamlit-expanderHeader {
         background: white !important;
         border-radius: 10px !important;
@@ -164,16 +157,6 @@ st.markdown("""
         box-shadow: 0 4px 12px rgba(0, 102, 204, 0.1) !important;
     }
     
-    /* CONTAINER */
-    .stContainer {
-        background: white !important;
-        border-radius: 14px !important;
-        border: 2px solid var(--border-light) !important;
-        padding: 1.5rem !important;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04) !important;
-    }
-    
-    /* CODE BLOCKS */
     .stCode {
         font-family: 'JetBrains Mono', monospace !important;
         background: #f8f6f3 !important;
@@ -182,7 +165,6 @@ st.markdown("""
         color: var(--text-dark) !important;
     }
     
-    /* ALERTS */
     .stAlert {
         border-radius: 10px !important;
         border: 2px solid transparent !important;
@@ -213,7 +195,6 @@ st.markdown("""
         color: #7f1d1d !important;
     }
     
-    /* DIVIDER */
     hr {
         border: none;
         height: 2px;
@@ -221,7 +202,6 @@ st.markdown("""
         margin: 2rem 0;
     }
     
-    /* TEXT */
     p, span {
         color: var(--text-dark) !important;
         font-family: 'Inter', sans-serif;
@@ -241,7 +221,6 @@ st.markdown("""
         font-size: 0.9em !important;
     }
     
-    /* JSON DISPLAY */
     [data-testid="stJson"] {
         background: white !important;
         border: 2px solid var(--border-light) !important;
@@ -250,7 +229,6 @@ st.markdown("""
         color: var(--text-dark) !important;
     }
     
-    /* FOOTER */
     .footer-text {
         font-family: 'JetBrains Mono', monospace;
         font-size: 0.85rem;
@@ -262,13 +240,11 @@ st.markdown("""
         letter-spacing: 0.5px;
     }
     
-    /* LABEL */
     label {
         color: var(--text-dark) !important;
         font-weight: 600 !important;
     }
     
-    /* SIDEBAR HEADINGS */
     [data-testid="stSidebar"] h3 {
         font-family: 'Space Grotesk', sans-serif !important;
         color: var(--primary-blue) !important;
@@ -291,9 +267,9 @@ with st.sidebar:
     3. **Generate** — Create a tailored fix
     4. **Review** — Verify safety & completeness
     """)
-    
+
     st.divider()
-    
+
     st.markdown("### ⚡ **Best For**")
     st.markdown("""
     - Docker & Kubernetes errors
@@ -302,14 +278,14 @@ with st.sidebar:
     - Cloud deployment problems
     - API integration errors
     """)
-    
+
     st.divider()
-    
+
     st.markdown("### 🛠️ **Tech Stack**")
     st.markdown("""
     **Orchestration:** LangGraph
     
-    **LLM:** Google Gemini 2.5 Flash
+    **LLM:** Google Gemini 3.8 Flash
     
     **Search:** Tavily AI
     """)
@@ -318,11 +294,10 @@ with st.sidebar:
 # MAIN CONTENT
 # ============================================================================
 
-# Header
-col_header = st.columns([1])
-with col_header[0]:
-    st.markdown('<h1 class="main-header">🧑🏻‍💻 LUMINA</h1>', unsafe_allow_html=True)
-    st.markdown('<p class="subtitle-text">// AI DevOps Troubleshooter</p>', unsafe_allow_html=True)
+# FIX 6: st.columns([1]) returns a list with one element — you must unpack it
+# or just write the content directly without columns when there's only one column.
+st.markdown('<h1 class="main-header">🧑🏻‍💻 LUMINA</h1>', unsafe_allow_html=True)
+st.markdown('<p class="subtitle-text">// AI DevOps Troubleshooter</p>', unsafe_allow_html=True)
 
 st.divider()
 
@@ -344,9 +319,10 @@ with col_status:
 
 st.divider()
 
-# Button
-col_button = st.columns([1, 2, 1])
-with col_button[1]:
+# FIX 7: Button layout — st.columns() with a list returns that many columns.
+# [1, 2, 1] gives 3 columns; index [1] is the middle one. This is correct usage.
+col_left, col_mid, col_right = st.columns([1, 2, 1])
+with col_mid:
     submit_button = st.button(
         "⚡ Analyze & Fix",
         use_container_width=True,
@@ -361,12 +337,12 @@ if submit_button:
     if not error_input.strip():
         st.warning("⚠️ Please paste an error first!")
         st.stop()
-    
+
     status_container.info("🔍 Analyzing...")
-    
+
     try:
         start_time = time.time()
-        
+
         result = app.invoke({
             "input": error_input,
             "history": [],
@@ -375,25 +351,25 @@ if submit_button:
             "generated_patch": "",
             "is_fixed": False
         })
-        
+
         elapsed_time = time.time() - start_time
-        
+
         status_container.success(f"✅ Done in {elapsed_time:.1f}s")
-        
+
         st.divider()
-        
+
         # METRICS
         st.markdown("### 📊 **Results**")
-        
+
         m1, m2, m3 = st.columns(3, gap="large")
-        
+
         with m1:
             st.metric(
                 "Error Type",
                 result.get('category', 'Unknown').replace('_', ' ').title(),
                 help="Categorized error type"
             )
-        
+
         with m2:
             refinements = max(0, len(result.get('history', [])) - 1)
             st.metric(
@@ -401,7 +377,7 @@ if submit_button:
                 f"{refinements}",
                 help="Self-correction loops"
             )
-        
+
         with m3:
             is_clean = "CLEAN" in str(result.get('history', []))
             confidence = "High" if is_clean else "Medium"
@@ -410,21 +386,29 @@ if submit_button:
                 confidence,
                 help="Solution verification"
             )
-        
+
         st.divider()
-        
+
         # SOLUTION
         st.markdown("### 🛠️ **Solution**")
-        with st.container(border=True):
-            st.markdown(result.get("generated_patch", "No solution generated"))
-        
+
+        # FIX 8: st.container(border=True) requires Streamlit >= 1.28.
+        # Using a try/except makes it backward-compatible with older versions.
+        try:
+            with st.container(border=True):
+                st.markdown(result.get("generated_patch", "No solution generated"))
+        except TypeError:
+            # Older Streamlit version — border param not supported
+            with st.container():
+                st.markdown(result.get("generated_patch", "No solution generated"))
+
         st.divider()
-        
+
         # ANALYSIS
         st.markdown("### 📚 **Analysis**")
-        
+
         c1, c2, c3 = st.columns(3, gap="large")
-        
+
         with c1:
             with st.expander("🧠 **Reasoning**"):
                 history = result.get('history', [])
@@ -437,12 +421,12 @@ if submit_button:
                         st.caption(step[:100] + "..." if len(step) > 100 else step)
                 else:
                     st.info("First attempt - no revisions")
-        
+
         with c2:
             with st.expander("📖 **Research**"):
                 research = result.get("research_notes", "No data")
                 st.code(research[:400] + "..." if len(research) > 400 else research)
-        
+
         with c3:
             with st.expander("⚙️ **Stats**"):
                 st.json({
@@ -450,17 +434,17 @@ if submit_button:
                     "refinement_loops": len(result.get('history', [])),
                     "processing_time_ms": int(elapsed_time * 1000)
                 })
-        
+
         st.divider()
-        
+
         # NEXT STEPS
         st.markdown("### 🚀 **Next Steps**")
         st.info("✓ Review the solution | ✓ Test in your environment | ✓ Deploy with confidence")
-        
+
     except Exception as e:
         error_str = str(e)
         status_container.error("❌ Error")
-        
+
         if "RESOURCE_EXHAUSTED" in error_str or "429" in error_str:
             st.error("**API Quota Exceeded**")
             st.markdown("""
@@ -477,14 +461,12 @@ if submit_button:
             st.error("**Unexpected Error**")
             with st.expander("Details"):
                 st.code(error_str)
-        
+
         st.info("Check: API keys | Packages installed | Internet connection")
 
 # ============================================================================
 # FOOTER
 # ============================================================================
-
-
 
 st.markdown("""
 <div class="footer-text">
