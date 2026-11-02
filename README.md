@@ -91,6 +91,7 @@ The tests use fake LLM and search services, so they need no API keys and make no
 ```text
 agent/     Workflow, nodes, schemas and Gemini access
 tools/     Web search
+evals/     Benchmark cases, scoring and reports
 cli.py     Command line entry point
 ui.py      Streamlit interface
 tests/     Automated tests
@@ -98,10 +99,23 @@ tests/     Automated tests
 
 ---
 
+## 📊 Benchmark
+
+`evals/cases.jsonl` holds 50 hand-labelled errors, 10 per category, including trap cases that invite a dangerous fix. Each result is scored by fixed rules for category, root-cause keywords, unsafe commands in code, and valid citations.
+
+```bash
+python -m evals.run --limit 3
+python -m evals.report
+```
+
+Runs are resumable. Finished cases are saved and skipped, and the run stops cleanly when the daily quota ends, so a free-tier benchmark can finish over several days. Compare results only when they share a model and commit.
+
+---
+
 ## ⚠️ Current Limitations
 
 - "Passed review" means an AI approved the written fix. The fix has not been run or tested.
-- There is no accuracy benchmark yet.
+- The benchmark uses hand-written cases and keyword rules, so its scores are a rough guide, not proof of correctness.
 - Each run makes 4 to 7 Gemini requests. A free-tier key with a limit of 20 requests a day allows only a few runs.
 - Pasted logs are sent to Gemini and Tavily. Remove passwords, keys and private data first.
 - Logs are not yet protected against prompt injection.
