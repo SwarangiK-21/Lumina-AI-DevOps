@@ -1,481 +1,218 @@
-"""
-LUMINA UI - AI DevOps Agent
-Balanced Modern Design - Professional & Engaging without being overdone
-"""
+"""LUMINA web interface."""
 
 import logging
 import time
+from pathlib import Path
 
 import streamlit as st
 
-from agent.config import DAILY_QUOTA_MARKER, ConfigError
+from agent.config import DAILY_QUOTA_MARKER, MAX_REVIEWS, MODEL_NAME, ConfigError
 from agent.graph import run_agent
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
 
-# ============================================================================
-# PAGE CONFIG
-# ============================================================================
+STYLE_PATH = Path(__file__).parent / "assets" / "style.css"
 
-st.set_page_config(
-    page_title="LUMINA - AI DevOps Agent",
-    page_icon="🧑🏻‍💻",
-    layout="wide",
-    initial_sidebar_state="expanded"
+STEPS = (
+    ("classifier", "Classify", "Pick the error type"),
+    ("researcher", "Research", "Search the web"),
+    ("coder", "Draft", "Write the fix"),
+    ("reviewer", "Review", "AI safety check"),
 )
 
-# ============================================================================
-# BALANCED MODERN STYLING
-# ============================================================================
+EXAMPLES = {
+    "Docker port clash": "docker: Error response from daemon: driver failed programming external connectivity: "
+                         "Bind for 0.0.0.0:8080 failed: port is already allocated.",
+    "Missing Python module": "ModuleNotFoundError: No module named 'requests'",
+    "SSH key rejected": "git@github.com: Permission denied (publickey).\nfatal: Could not read from remote repository.",
+}
 
-st.markdown("""
-<style>
-    @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
-    
-    :root {
-        --primary-blue: #0066cc;
-        --primary-blue-dark: #004da6;
-        --accent-orange: #ff6b35;
-        --success-green: #2dd4bf;
-        --bg-light: #f8f6f3;
-        --bg-white: #ffffff;
-        --text-dark: #1a1a1a;
-        --text-gray: #666666;
-        --border-light: #e5e0db;
-    }
-    
-    .stApp {
-        background: linear-gradient(135deg, #f8f6f3 0%, #ede9e4 50%, #faf8f5 100%);
-        background-attachment: fixed;
-        font-family: 'Inter', sans-serif;
-    }
-    
-    [data-testid="stSidebar"] {
-        background: linear-gradient(180deg, #fdfbf8 0%, #f5f1ed 100%);
-        border-right: 2px solid var(--border-light);
-    }
-    
-    [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] {
-        color: var(--text-dark);
-    }
-    
-    .main-header {
-        font-family: 'Space Grotesk', sans-serif;
-        font-size: 3.5rem;
-        font-weight: 700;
-        color: var(--primary-blue);
-        margin-bottom: 0;
-        letter-spacing: -0.5px;
-    }
-    
-    .subtitle-text {
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 1rem;
-        color: var(--text-gray);
-        margin-bottom: 2rem;
-        letter-spacing: 1px;
-    }
-    
-    .stTextArea textarea {
-        font-family: 'JetBrains Mono', monospace !important;
-        font-size: 0.95rem !important;
-        background: white !important;
-        border: 2px solid var(--border-light) !important;
-        border-radius: 12px !important;
-        padding: 1rem !important;
-        color: var(--text-dark) !important;
-        transition: all 0.3s ease !important;
-    }
-    
-    .stTextArea textarea:focus {
-        border-color: var(--primary-blue) !important;
-        box-shadow: 0 0 0 4px rgba(0, 102, 204, 0.1) !important;
-    }
-    
-    .stButton > button {
-        font-family: 'Space Grotesk', sans-serif;
-        font-size: 1rem;
-        font-weight: 600;
-        padding: 0.8rem 2rem !important;
-        background: linear-gradient(135deg, var(--primary-blue) 0%, var(--primary-blue-dark) 100%) !important;
-        color: white !important;
-        border: none !important;
-        border-radius: 10px !important;
-        letter-spacing: 0.5px;
-        transition: all 0.3s ease !important;
-        box-shadow: 0 4px 15px rgba(0, 102, 204, 0.2) !important;
-    }
-    
-    .stButton > button:hover {
-        transform: translateY(-2px) !important;
-        box-shadow: 0 8px 25px rgba(0, 102, 204, 0.3) !important;
-    }
-    
-    [data-testid="metric-container"] {
-        background: white !important;
-        border-radius: 14px !important;
-        padding: 1.5rem !important;
-        border: 2px solid var(--border-light) !important;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04) !important;
-        transition: all 0.3s ease !important;
-    }
-    
-    [data-testid="metric-container"]:hover {
-        border-color: var(--primary-blue) !important;
-        box-shadow: 0 8px 20px rgba(0, 102, 204, 0.1) !important;
-        transform: translateY(-3px) !important;
-    }
-    
-    [data-testid="stMetricValue"] {
-        color: var(--primary-blue) !important;
-        font-family: 'Space Grotesk', sans-serif !important;
-        font-weight: 700 !important;
-        font-size: 1.8rem !important;
-    }
-    
-    [data-testid="stMetricLabel"] {
-        color: var(--text-gray) !important;
-        font-weight: 600 !important;
-        font-size: 0.95rem !important;
-    }
-    
-    .stMarkdown h3 {
-        font-family: 'Space Grotesk', sans-serif !important;
-        font-size: 1.3rem !important;
-        font-weight: 700 !important;
-        color: var(--primary-blue) !important;
-        margin: 1.5rem 0 1rem 0 !important;
-    }
-    
-    .streamlit-expanderHeader {
-        background: white !important;
-        border-radius: 10px !important;
-        border: 2px solid var(--border-light) !important;
-        padding: 1rem !important;
-        font-family: 'Space Grotesk', sans-serif !important;
-        font-weight: 600 !important;
-        color: var(--primary-blue) !important;
-        transition: all 0.3s ease !important;
-    }
-    
-    .streamlit-expanderHeader:hover {
-        border-color: var(--primary-blue) !important;
-        box-shadow: 0 4px 12px rgba(0, 102, 204, 0.1) !important;
-    }
-    
-    .stCode {
-        font-family: 'JetBrains Mono', monospace !important;
-        background: #f8f6f3 !important;
-        border-left: 4px solid var(--primary-blue) !important;
-        border-radius: 10px !important;
-        color: var(--text-dark) !important;
-    }
-    
-    .stAlert {
-        border-radius: 10px !important;
-        border: 2px solid transparent !important;
-        font-family: 'Inter', sans-serif !important;
-    }
-    
-    [data-testid="stAlertSuccess"] {
-        background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%) !important;
-        border-color: var(--success-green) !important;
-        color: #166534 !important;
-    }
-    
-    [data-testid="stAlertWarning"] {
-        background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%) !important;
-        border-color: var(--accent-orange) !important;
-        color: #92400e !important;
-    }
-    
-    [data-testid="stAlertInfo"] {
-        background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%) !important;
-        border-color: var(--primary-blue) !important;
-        color: #1e40af !important;
-    }
-    
-    [data-testid="stAlertError"] {
-        background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%) !important;
-        border-color: #ef4444 !important;
-        color: #7f1d1d !important;
-    }
-    
-    hr {
-        border: none;
-        height: 2px;
-        background: linear-gradient(90deg, transparent, var(--border-light), transparent);
-        margin: 2rem 0;
-    }
-    
-    p, span {
-        color: var(--text-dark) !important;
-        font-family: 'Inter', sans-serif;
-    }
-    
-    [data-testid="stMarkdownContainer"] p {
-        color: var(--text-dark) !important;
-        line-height: 1.6;
-    }
-    
-    [data-testid="stMarkdownContainer"] code {
-        font-family: 'JetBrains Mono', monospace !important;
-        background: #f8f6f3 !important;
-        color: var(--accent-orange) !important;
-        padding: 0.2rem 0.5rem !important;
-        border-radius: 4px !important;
-        font-size: 0.9em !important;
-    }
-    
-    [data-testid="stJson"] {
-        background: white !important;
-        border: 2px solid var(--border-light) !important;
-        border-radius: 10px !important;
-        padding: 1rem !important;
-        color: var(--text-dark) !important;
-    }
-    
-    .footer-text {
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 0.85rem;
-        color: var(--text-gray);
-        text-align: center;
-        margin-top: 3rem;
-        padding-top: 2rem;
-        border-top: 2px solid var(--border-light);
-        letter-spacing: 0.5px;
-    }
-    
-    label {
-        color: var(--text-dark) !important;
-        font-weight: 600 !important;
-    }
-    
-    [data-testid="stSidebar"] h3 {
-        font-family: 'Space Grotesk', sans-serif !important;
-        color: var(--primary-blue) !important;
-        font-weight: 700 !important;
-    }
-</style>
-""", unsafe_allow_html=True)
 
-# ============================================================================
-# SIDEBAR
-# ============================================================================
+def use_example(text: str) -> None:
+    """Put an example error in the input box."""
+    st.session_state.error_input = text
 
-with st.sidebar:
-    st.markdown("### 🔧 **How It Works**")
-    st.markdown("""
-    **LUMINA** analyzes your error in 4 steps:
-    
-    1. **Analyze** — Categorize the error type
-    2. **Research** — Find solutions from real docs
-    3. **Generate** — Create a tailored fix
-    4. **Review** — AI check of safety & completeness
-    """)
 
-    st.divider()
+def clear_page() -> None:
+    """Empty the input box and remove the last result."""
+    st.session_state.error_input = ""
+    st.session_state.pop("outcome", None)
 
-    st.markdown("### ⚡ **Best For**")
-    st.markdown("""
-    - Docker & Kubernetes errors
-    - Python exceptions
-    - Node.js issues
-    - Cloud deployment problems
-    - API integration errors
-    """)
 
-    st.divider()
+def steps_html(active: int, attempt: int) -> str:
+    """Build the progress strip. Every step before active is finished."""
+    cards = []
 
-    st.markdown("### 🛠️ **Tech Stack**")
-    st.markdown("""
-    **Orchestration:** LangGraph
-    
-    **LLM:** Google Gemini 3.6 Flash
-    
-    **Search:** Tavily AI
-    """)
+    for index, (_, title, detail) in enumerate(STEPS):
+        state = "done" if index < active else "active" if index == active else ""
+        cards.append(f'<div class="step {state}"><strong>{title}</strong><span>{detail}</span></div>')
 
-# ============================================================================
-# MAIN CONTENT
-# ============================================================================
+    note = f'<p class="attempt">Review asked for changes: attempt {attempt} of {MAX_REVIEWS}</p>' if attempt > 1 else ""
+    return f'<div class="steps">{"".join(cards)}</div>{note}'
 
-st.markdown('<h1 class="main-header">🧑🏻‍💻 LUMINA</h1>', unsafe_allow_html=True)
-st.markdown('<p class="subtitle-text">// AI DevOps Troubleshooter</p>', unsafe_allow_html=True)
 
-st.divider()
+def analyze(error: str, progress) -> dict:
+    """Run the agent with live progress and return what to show."""
+    names = [name for name, _, _ in STEPS]
+    attempt = 1
 
-# Input Section
-col_input, col_status = st.columns([3.5, 1], gap="large")
+    def on_step(node: str, update: dict) -> None:
+        nonlocal attempt
 
-with col_input:
-    st.markdown("### 📋 **Your Error**")
-    error_input = st.text_area(
-        "Paste your error:",
-        placeholder="Paste your error message, stack trace, or logs here...",
-        height=200,
-        label_visibility="collapsed"
-    )
+        active = names.index(node) + 1
+        if node == "reviewer":
+            active = 1
+            attempt += 1
 
-with col_status:
-    st.markdown("### **Status**")
-    status_container = st.empty()
+        progress.markdown(steps_html(active, attempt), unsafe_allow_html=True)
 
-st.divider()
-
-col_left, col_mid, col_right = st.columns([1, 2, 1])
-with col_mid:
-    submit_button = st.button(
-        "⚡ Analyze & Fix",
-        use_container_width=True,
-        key="analyze_button"
-    )
-
-# ============================================================================
-# RESULTS
-# ============================================================================
-
-if submit_button:
-    if not error_input.strip():
-        st.warning("⚠️ Please paste an error first!")
-        st.stop()
-
-    status_container.info("🔍 Analyzing...")
+    progress.markdown(steps_html(0, attempt), unsafe_allow_html=True)
+    start_time = time.time()
 
     try:
-        start_time = time.time()
-
-        result = run_agent(error_input)
-
-        elapsed_time = time.time() - start_time
-
-        status_container.success(f"✅ Done in {elapsed_time:.1f}s")
-
-        st.divider()
-
-        # METRICS
-        st.markdown("### 📊 **Results**")
-
-        history = result.get('history', [])
-        sources = result.get('sources', [])
-
-        m1, m2, m3, m4 = st.columns(4, gap="large")
-
-        with m1:
-            st.metric(
-                "Error Type",
-                result.get('category', 'Unknown').replace('_', ' ').title(),
-                help="Categorized error type"
-            )
-
-        with m2:
-            refinements = max(0, len(history) - 1)
-            st.metric(
-                "Refinements",
-                f"{refinements}",
-                help="Self-correction loops"
-            )
-
-        with m3:
-            st.metric(
-                "AI Review",
-                "Passed" if result.get('passed_review') else "Not passed",
-                help="A second AI check of the written fix. The fix has not been run."
-            )
-
-        with m4:
-            st.metric(
-                "Web Sources",
-                f"{len(sources)}",
-                help="Sources available to the final solution"
-            )
-
-        if not result.get('passed_review') and history:
-            st.warning(f"**This fix did not pass AI review.** {history[-1]['feedback']}")
-
-        if not sources:
-            st.warning("**No web sources were found.** This fix relies on the model's own knowledge.")
-
-        st.divider()
-
-        # SOLUTION
-        st.markdown("### 🛠️ **Solution**")
-
-        with st.container(border=True):
-            st.markdown(result.get("generated_patch", "No solution generated"))
-
-        st.divider()
-
-        # ANALYSIS
-        st.markdown("### 📚 **Analysis**")
-
-        c1, c2, c3 = st.columns(3, gap="large")
-
-        with c1, st.expander("🧠 **Reviews**"):
-            for i, review in enumerate(history, 1):
-                if review["verdict"] == "CLEAN":
-                    st.success(f"Review {i}: Passed")
-                else:
-                    st.warning(f"Review {i}: Changes requested")
-                st.caption(review["feedback"])
-
-        with c2, st.expander("📖 **Sources**"):
-            if sources:
-                for i, source in enumerate(sources, 1):
-                    st.markdown(f"[{i}] [{source['title']}]({source['url']})")
-            else:
-                st.info("No web sources")
-
-        with c3, st.expander("⚙️ **Stats**"):
-            st.json({
-                "category": result.get('category'),
-                "reviews": len(history),
-                "refinements": refinements,
-                "passed_review": result.get('passed_review'),
-                "sources": len(sources),
-                "processing_time_ms": int(elapsed_time * 1000)
-            })
-
-        st.divider()
-
-        # NEXT STEPS
-        st.markdown("### 🚀 **Next Steps**")
-        st.info("LUMINA has not run this fix. Read each command and test it somewhere safe before using it in production.")
+        return {"result": run_agent(error, on_step), "seconds": time.time() - start_time}
 
     except Exception as e:
         logger.exception("Run failed")
-        error_str = str(e)
-        status_container.error("❌ Error")
+        return {"failure": e}
 
-        if isinstance(e, ConfigError):
-            st.error("**Setup Needed**")
-            st.markdown(error_str)
-        elif DAILY_QUOTA_MARKER in error_str:
-            st.error("**Daily Gemini Quota Used**")
-            st.markdown("The quota resets daily. Try again after the reset, or upgrade your Gemini plan.")
-        elif "RESOURCE_EXHAUSTED" in error_str or "429" in error_str:
-            st.error("**Gemini Rate Limit Reached**")
-            st.markdown("Wait a minute and try again.")
-        elif any(code in error_str for code in ("503", "504", "UNAVAILABLE", "DEADLINE_EXCEEDED")):
-            st.error("**Gemini Is Busy Right Now**")
-            st.markdown("This is usually temporary. Please try again shortly.")
-        elif "No module named" in error_str:
-            st.error("**Missing Package**")
-            st.markdown("```bash\npip install -r requirements.txt\n```")
-        else:
-            st.error("**Unexpected Error**")
-            with st.expander("Details"):
-                st.code(error_str)
+    finally:
+        progress.empty()
 
-        st.info("Check: API keys | Packages installed | Internet connection")
 
-# ============================================================================
-# FOOTER
-# ============================================================================
+def fix_as_markdown(result: dict) -> str:
+    """Build the downloadable copy of the fix and its sources."""
+    lines = [result["generated_patch"]]
 
-st.markdown("""
-<div class="footer-text">
-⚡ LUMINA | AI DevOps Troubleshooter | 2026
-</div>
-""", unsafe_allow_html=True)
+    if result["sources"]:
+        lines.extend(["", "## Sources"])
+        lines.extend(f"[{i}] {source['title']}: {source['url']}" for i, source in enumerate(result["sources"], 1))
+
+    return "\n".join(lines)
+
+
+def show_failure(failure: Exception) -> None:
+    """Explain a failed run."""
+    message = str(failure)
+
+    if isinstance(failure, ConfigError):
+        st.error("**Setup Needed**")
+        st.markdown(message)
+    elif DAILY_QUOTA_MARKER in message:
+        st.error("**Daily Gemini Quota Used**")
+        st.markdown("The quota resets daily. Try again after the reset, or upgrade your Gemini plan.")
+    elif "RESOURCE_EXHAUSTED" in message or "429" in message:
+        st.error("**Gemini Rate Limit Reached**")
+        st.markdown("Wait a minute and try again.")
+    elif any(code in message for code in ("503", "504", "UNAVAILABLE", "DEADLINE_EXCEEDED")):
+        st.error("**Gemini Is Busy Right Now**")
+        st.markdown("This is usually temporary. Please try again shortly.")
+    elif "No module named" in message:
+        st.error("**Missing Package**")
+        st.markdown("```bash\npip install -r requirements.txt\n```")
+    else:
+        st.error("**Unexpected Error**")
+        st.markdown("Check your API keys and internet connection.")
+        with st.expander("Details"):
+            st.code(message)
+
+
+def show_result(result: dict, seconds: float) -> None:
+    """Show the verdict, the fix and the evidence behind it."""
+    history = result["history"]
+    sources = result["sources"]
+    passed = result["passed_review"]
+
+    if passed:
+        st.success("**Passed AI review.** LUMINA has not run this fix, so test it somewhere safe first.")
+    elif history:
+        st.warning(f"**This fix did not pass AI review.** {history[-1]['feedback']}")
+
+    if not sources:
+        st.warning("**No web sources were found.** This fix relies on the model's own knowledge.")
+
+    type_column, review_column, sources_column, time_column = st.columns(4)
+    type_column.metric("Error Type", result["category"].replace("_", " ").title())
+    review_column.metric(
+        "AI Review",
+        "Passed" if passed else "Not passed",
+        help="A second AI check of the written fix. The fix has not been run.",
+    )
+    sources_column.metric("Web Sources", len(sources))
+    time_column.metric("Time", f"{seconds:.1f}s")
+
+    st.subheader("Proposed fix")
+
+    with st.container(border=True):
+        st.markdown(result["generated_patch"])
+
+    st.download_button(
+        "Download as Markdown",
+        fix_as_markdown(result),
+        file_name="lumina-fix.md",
+        mime="text/markdown",
+        on_click="ignore",
+    )
+
+    sources_tab, reviews_tab = st.tabs([f"Sources ({len(sources)})", f"Reviews ({len(history)})"])
+
+    with sources_tab:
+        if not sources:
+            st.caption("No web sources")
+        for i, source in enumerate(sources, 1):
+            st.markdown(f"[{i}] [{source['title']}]({source['url']})")
+
+    with reviews_tab:
+        for i, review in enumerate(history, 1):
+            verdict = "Passed" if review["verdict"] == "CLEAN" else "Changes requested"
+            st.markdown(f"**Review {i}: {verdict}**")
+            st.caption(review["feedback"])
+
+
+st.set_page_config(page_title="LUMINA", page_icon="⚡", layout="wide", initial_sidebar_state="collapsed")
+st.markdown(f"<style>{STYLE_PATH.read_text(encoding='utf-8')}</style>", unsafe_allow_html=True)
+
+st.markdown('<p class="brand">LUMINA</p>', unsafe_allow_html=True)
+st.markdown(
+    '<p class="tagline">Paste an error. Get a researched, reviewed fix to try yourself.</p>',
+    unsafe_allow_html=True,
+)
+
+error_input = st.text_area(
+    "Your error",
+    key="error_input",
+    placeholder="Paste an error message, stack trace or logs...",
+    height=180,
+)
+
+st.caption("Sent to Gemini and Tavily, so remove passwords, keys and private data first.")
+
+example_columns = st.columns(len(EXAMPLES))
+for column, (label, text) in zip(example_columns, EXAMPLES.items(), strict=True):
+    column.button(label, key=f"example_{label}", on_click=use_example, args=(text,), use_container_width=True)
+
+analyze_column, clear_column = st.columns([4, 1])
+submitted = analyze_column.button("Analyze error", key="analyze_button", type="primary", use_container_width=True)
+clear_column.button("Clear", key="clear_button", on_click=clear_page, use_container_width=True)
+
+progress = st.empty()
+
+if submitted:
+    st.session_state.pop("outcome", None)
+
+    if error_input.strip():
+        st.session_state.outcome = analyze(error_input, progress)
+    else:
+        st.warning("Paste an error first.")
+
+outcome = st.session_state.get("outcome")
+
+if outcome:
+    st.divider()
+    if "failure" in outcome:
+        show_failure(outcome["failure"])
+    else:
+        show_result(outcome["result"], outcome["seconds"])
+
+st.caption(f"LUMINA proposes fixes and never runs them. Model: {MODEL_NAME}")

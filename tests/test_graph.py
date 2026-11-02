@@ -18,6 +18,15 @@ def test_clean_review_finishes_first_time(use_llm, use_search):
     assert len(llm.coder_prompts()) == 1
 
 
+def test_each_finished_step_is_reported_in_order(use_llm, use_search):
+    use_llm([redo(), clean()])
+    steps = []
+
+    run_agent("port busy", lambda node, update: steps.append(node))
+
+    assert steps == ["classifier", "researcher", "coder", "reviewer"] + ["researcher", "coder", "reviewer"]
+
+
 def test_feedback_and_previous_fix_reach_next_attempt(use_llm, use_search):
     llm = use_llm([redo("MARKER"), clean()])
 

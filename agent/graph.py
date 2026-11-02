@@ -1,5 +1,7 @@
 """Build and run the LangGraph workflow."""
 
+from collections.abc import Callable
+
 from langgraph.graph import END, START, StateGraph
 
 from agent.nodes import (
@@ -41,6 +43,18 @@ def build_graph():
 graph = build_graph()
 
 
-def run_agent(error: str) -> AgentState:
-    """Run one full troubleshooting pass and return the final state."""
-    return graph.invoke(initial_state(error))
+def run_agent(error: str, on_step: Callable[[str, dict], None] | None = None) -> AgentState:
+    """Run one full troubleshooting pass and return the final state.
+
+    on_step, if given, is called with each finished node's name and update.
+    """
+    final_state = None
+
+    for mode, chunk in graph.stream(initial_state(error), stream_mode=["updates", "values"]):
+        if mode == "values":
+            final_state = chunk
+        elif on_step:
+            for node, update in chunk.items():
+                on_step(node, update)
+
+    return final_state
