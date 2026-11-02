@@ -1,13 +1,13 @@
 """
 LUMINA - AI DevOps Troubleshooter Agent
-Production-Ready Version | Fully Error-Free
 Built with LangGraph + Google Gemini + Tavily Search
 """
 
 import os
+import sys
 import time
 import random
-from typing import TypedDict, List, Annotated
+from typing import TypedDict, List, Annotated, Literal
 import operator
 
 # ============================================================================
@@ -22,6 +22,13 @@ except ImportError:
     exit(1)
 
 try:
+    from pydantic import BaseModel, Field
+    print("✅ Pydantic loaded")
+except ImportError:
+    print("❌ pydantic not installed. Run: pip install -r requirements.txt")
+    exit(1)
+
+try:
     from langchain_google_genai import ChatGoogleGenerativeAI
     print("✅ Google Gemini API loaded")
 except ImportError:
@@ -29,14 +36,13 @@ except ImportError:
     exit(1)
 
 try:
-    from langchain_community.tools.tavily_search import TavilySearchResults
+    from langchain_tavily import TavilySearch
     print("✅ Tavily Search loaded")
 except ImportError:
-    print("❌ langchain-community not installed. Run: pip install langchain-community")
+    print("❌ langchain-tavily not installed. Run: pip install langchain-tavily")
     exit(1)
 
 try:
-    # FIX 1: Import START alongside END — required in modern LangGraph (>=0.1.0)
     from langgraph.graph import StateGraph, END, START
     print("✅ LangGraph loaded")
 except ImportError:
@@ -66,6 +72,22 @@ if not tavily_key:
 print("✅ API keys loaded successfully!\n")
 
 # ============================================================================
+# SETTINGS
+# ============================================================================
+
+MAX_REVIEWS = 3          # Total review rounds before the run stops
+MAX_SOURCES = 3          # Web sources used per search
+MAX_QUERY_CHARS = 400    # Tavily rejects or degrades longer queries
+
+# Provider errors that are usually temporary and worth retrying
+RETRYABLE_ERRORS = (
+    "429", "RESOURCE_EXHAUSTED",
+    "503", "UNAVAILABLE",
+    "504", "DEADLINE_EXCEEDED",
+    "INTERNAL",
+)
+
+# ============================================================================
 # INITIALIZE LLM & SEARCH TOOLS
 # ============================================================================
 
@@ -82,12 +104,36 @@ except Exception as e:
     exit(1)
 
 try:
-    search_tool = TavilySearchResults(api_key=tavily_key, k=3)
+    search_tool = TavilySearch(max_results=MAX_SOURCES, tavily_api_key=tavily_key)
     print("✅ Tavily Search initialized\n")
 except Exception as e:
     print(f"⚠️ Tavily Search initialization warning: {e}")
     search_tool = None
     print("⚠️ Continuing without search capability\n")
+
+# ============================================================================
+# STRUCTURED OUTPUTS
+# ============================================================================
+
+class Classification(BaseModel):
+    """The single category that best fits the error"""
+    category: Literal[
+        "SYNTAX_ERROR",
+        "LOGIC_ERROR",
+        "ENVIRONMENT_ERROR",
+        "DEPENDENCY_ERROR",
+        "PERMISSION_ERROR",
+    ]
+
+
+class Review(BaseModel):
+    """The reviewer's decision on a proposed fix"""
+    verdict: Literal["CLEAN", "REDO"] = Field(
+        description="CLEAN if the fix is safe and correct, otherwise REDO"
+    )
+    feedback: str = Field(
+        description="Why the fix passed, or exactly what must change"
+    )
 
 # ============================================================================
 # STATE DEFINITION
@@ -98,55 +144,90 @@ class AgentState(TypedDict):
     input: str                                          # The error message from user
     category: str                                       # Categorized error type
     research_notes: str                                 # Research findings from web
+    sources: List[dict]                                 # Title and URL of each web source
     generated_patch: str                                # Generated solution
-    # FIX 2: operator.add works for List[str] — this is correct for LangGraph reducers
-    # Each node returning {"history": [...]} will have its list APPENDED to the state list
-    history: Annotated[List[str], operator.add]
-    is_fixed: bool                                      # Whether error is fixed
+    history: Annotated[List[dict], operator.add]        # One verdict/feedback per review
+    passed_review: bool                                 # Reviewer approved the final solution
+
+
+def initial_state(error: str) -> AgentState:
+    """Build the starting state for one run."""
+    return {
+        "input": error,
+        "category": "",
+        "research_notes": "",
+        "sources": [],
+        "generated_patch": "",
+        "history": [],
+        "passed_review": False
+    }
 
 # ============================================================================
 # UTILITY FUNCTIONS
 # ============================================================================
 
-def call_llm_with_retry(prompt: str, max_retries: int = 3) -> str:
+def invoke_with_retry(runnable, prompt: str, max_retries: int = 3):
     """
-    Call Gemini API with exponential backoff retry logic.
+    Invoke a model with exponential backoff on temporary provider errors.
 
     Args:
-        prompt: The prompt to send to Gemini
-        max_retries: Maximum number of retry attempts
+        runnable: The model or structured-output model to call
+        prompt: The prompt to send
+        max_retries: Maximum number of attempts
 
     Returns:
-        LLM response content as string
+        The model's response
     """
     for attempt in range(max_retries):
         try:
-            response = llm.invoke(prompt)
-            return response.text
+            return runnable.invoke(prompt)
 
         except Exception as e:
             error_msg = str(e)
+            is_temporary = any(code in error_msg for code in RETRYABLE_ERRORS)
 
-            # Check for quota/rate limit errors
-            if "429" in error_msg or "RESOURCE_EXHAUSTED" in error_msg:
-                if attempt < max_retries - 1:
-                    wait_time = 2 ** (attempt + 1) + random.uniform(0, 1)
-                    print(f"⚠️ Rate limited. Waiting {wait_time:.1f}s before retry...")
-                    time.sleep(wait_time)
-                    continue
-                else:
-                    raise Exception(
-                        "❌ API quota exhausted. Please upgrade your Google Cloud plan or wait 24 hours."
-                    )
+            if is_temporary and attempt < max_retries - 1:
+                wait_time = 2 ** (attempt + 1) + random.uniform(0, 1)
+                print(f"⚠️ Temporary provider error. Waiting {wait_time:.1f}s before retry...")
+                time.sleep(wait_time)
+                continue
 
-            # Other errors - re-raise
-            raise e
-
-    # Should never reach here, but satisfies the linter
-    raise Exception("❌ Max retries exceeded without a successful response.")
+            raise
 
 
-def safe_search(query: str) -> str:
+def call_llm(prompt: str) -> str:
+    """Call Gemini and return plain text."""
+    return invoke_with_retry(llm, prompt).text
+
+
+def call_llm_structured(schema, prompt: str):
+    """Call Gemini and return a validated instance of schema."""
+    result = invoke_with_retry(llm.with_structured_output(schema), prompt)
+
+    if result is None:
+        raise ValueError(f"Model returned no valid {schema.__name__}.")
+
+    return result
+
+
+def build_search_query(error: str, feedback: str = "") -> str:
+    """
+    Build a search query within Tavily's length limit.
+
+    Keeps both ends of long input, because stack traces can put the
+    useful line at either end.
+    """
+    error = " ".join(error.split())
+    room = MAX_QUERY_CHARS - len(feedback) - 1
+
+    if len(error) > room:
+        half = room // 2
+        error = f"{error[:half]} {error[-half:]}"
+
+    return f"{error} {feedback}".strip()[:MAX_QUERY_CHARS]
+
+
+def safe_search(query: str) -> tuple[str, List[dict]]:
     """
     Safely perform web search with fallback.
 
@@ -154,25 +235,33 @@ def safe_search(query: str) -> str:
         query: Search query string
 
     Returns:
-        Research findings as formatted string
+        Research findings as formatted text, and the sources behind them
     """
     if not search_tool:
-        return "⚠️ Search unavailable. Using general knowledge."
+        return "No web research available: search is not configured.", []
 
     try:
-        search_results = search_tool.invoke({"query": query})
+        response = search_tool.invoke({"query": query})
+        results = response.get("results", []) if isinstance(response, dict) else []
 
-        research_text = "📚 RESEARCH FINDINGS:\n\n"
-        for i, result in enumerate(search_results, 1):
+        if not results:
+            return "No web research available: search returned no results.", []
+
+        research_text = "RESEARCH FINDINGS:\n\n"
+        sources = []
+
+        for i, result in enumerate(results, 1):
             url = result.get('url', 'Unknown URL')
+            title = result.get('title') or url
             content = result.get('content', 'No content')
-            research_text += f"Source {i}: {url}\n"
-            research_text += f"Content: {content[:300]}...\n\n"
+            research_text += f"[{i}] {title}\nURL: {url}\nContent: {content}\n\n"
+            sources.append({"title": title, "url": url})
 
-        return research_text
+        return research_text, sources
 
     except Exception as e:
-        return f"⚠️ Search failed: {str(e)[:100]}\nUsing internal knowledge instead."
+        print(f"⚠️ Search failed: {str(e)[:100]}")
+        return "No web research available: search failed.", []
 
 # ============================================================================
 # AGENT NODES
@@ -203,47 +292,46 @@ Categorize this error into ONE of these types:
 - PERMISSION_ERROR (Access denied, authentication issues)
 
 ERROR MESSAGE:
-{state['input']}
+{state['input']}"""
 
-Respond with ONLY the category name (no explanation)."""
-
-    category = call_llm_with_retry(prompt).strip()
+    category = call_llm_structured(Classification, prompt).category
     print(f"✓ Error Category: {category}")
 
-    return {
-        "category": category,
-        "research_notes": "",
-        "generated_patch": "",
-        "is_fixed": False,
-        # FIX 3: Return an empty list here — the Annotated reducer will append to
-        # whatever already exists. Do NOT return history: [] from every node,
-        # only from classifier (which resets the run). Other nodes must NOT
-        # return history at all unless they want to append something.
-        "history": []
-    }
+    return {"category": category}
 
 def researcher_node(state: AgentState) -> dict:
     """
-    Research the error using web search + documentation.
+    Research the error using web search, guided by any reviewer feedback.
     """
     print("\n" + "="*60)
     print("🔍 [STEP 2/4] RESEARCHING SOLUTIONS")
     print("="*60)
 
-    search_query = f"{state['category']} {state['input']} solution fix 2026"
+    feedback = state["history"][-1]["feedback"][:120] if state["history"] else ""
+    search_query = build_search_query(state["input"], feedback)
 
-    research_notes = safe_search(search_query)
-    print("✓ Research complete")
+    research_notes, sources = safe_search(search_query)
+    print(f"✓ Research complete ({len(sources)} sources)")
 
-    return {"research_notes": research_notes}
+    return {"research_notes": research_notes, "sources": sources}
 
 def coder_node(state: AgentState) -> dict:
     """
-    Generate a solution based on research and error analysis.
+    Generate a solution based on research, error analysis and past reviews.
     """
     print("\n" + "="*60)
     print("💻 [STEP 3/4] GENERATING SOLUTION")
     print("="*60)
+
+    revision = ""
+    if state["history"]:
+        revision = f"""
+PREVIOUS ATTEMPT:
+{state['generated_patch']}
+
+REVIEWER FEEDBACK (you must address this):
+{state['history'][-1]['feedback']}
+"""
 
     prompt = f"""You are a Senior DevOps Engineer with 10+ years experience.
 
@@ -252,7 +340,7 @@ ERROR MESSAGE: {state['input']}
 
 RESEARCH DATA:
 {state['research_notes']}
-
+{revision}
 Generate a comprehensive fix with the following sections:
 
 1. ROOT CAUSE
@@ -268,9 +356,12 @@ Generate a comprehensive fix with the following sections:
 4. PREVENTION
    Best practice to avoid this error in the future.
 
+Cite research with its number, like [1], where it supports a claim.
+Only cite numbers listed in RESEARCH DATA, and never invent sources.
+
 Format clearly with headers. Be concise but complete."""
 
-    solution = call_llm_with_retry(prompt)
+    solution = call_llm(prompt)
     print("✓ Solution generated")
 
     return {"generated_patch": solution}
@@ -290,6 +381,9 @@ Review this fix for safety and correctness.
 ORIGINAL ERROR:
 {state['input']}
 
+RESEARCH DATA:
+{state['research_notes']}
+
 PROPOSED FIX:
 {state['generated_patch']}
 
@@ -299,24 +393,21 @@ Evaluate on these criteria:
 3. COMPLETENESS: Does it handle edge cases?
 4. BEST_PRACTICES: Does it follow industry standards?
 
-Respond with EXACTLY one of these formats:
+Use verdict CLEAN only if the fix meets all four criteria. Otherwise use
+verdict REDO and say exactly what must change."""
 
-CLEAN: [2-3 sentence explanation why it's safe and correct]
+    review = call_llm_structured(Review, prompt)
+    passed = review.verdict == "CLEAN"
 
-OR
-
-REDO: [Explain what's wrong and what to try instead]"""
-
-    review = call_llm_with_retry(prompt).strip()
-
-    if "CLEAN" in review.upper():
-        print("✓ Solution passed review - VERIFIED")
+    if passed:
+        print("✓ Solution passed review")
     else:
         print("⚠️ Solution needs refinement")
 
-    # FIX 4: Returning {"history": [review]} correctly APPENDS one item to the
-    # Annotated list. This is the right pattern — do not use operator.add manually.
-    return {"history": [review]}
+    return {
+        "history": [{"verdict": review.verdict, "feedback": review.feedback}],
+        "passed_review": passed
+    }
 
 # ============================================================================
 # ROUTING LOGIC
@@ -326,18 +417,12 @@ def should_refine(state: AgentState) -> str:
     """
     Determine whether to refine the solution or finish.
     """
-    if not state["history"]:
+    if state["passed_review"]:
         return "finish"
 
-    last_review = state["history"][-1]
-
-    # If solution passed review, finish
-    if "CLEAN" in last_review.upper():
-        return "finish"
-
-    # Prevent infinite loops (max 3 refinement attempts)
-    if len(state["history"]) >= 3:
-        print("\n⚠️ Max refinement attempts reached. Finishing with best solution.")
+    # Prevent infinite loops
+    if len(state["history"]) >= MAX_REVIEWS:
+        print("\n⚠️ Review limit reached. Finishing without passing review.")
         return "finish"
 
     # Otherwise, refine
@@ -356,11 +441,8 @@ workflow.add_node("researcher", researcher_node)
 workflow.add_node("coder", coder_node)
 workflow.add_node("reviewer", reviewer_node)
 
-# FIX 5: set_entry_point() is deprecated in LangGraph >=0.1.0
-# Use add_edge(START, "first_node") instead
-workflow.add_edge(START, "classifier")
-
 # Define edges
+workflow.add_edge(START, "classifier")
 workflow.add_edge("classifier", "researcher")
 workflow.add_edge("researcher", "coder")
 workflow.add_edge("coder", "reviewer")
@@ -398,14 +480,7 @@ if __name__ == "__main__":
         start_time = time.time()
 
         # Invoke the agent
-        final_state = app.invoke({
-            "input": test_error,
-            "category": "",
-            "research_notes": "",
-            "generated_patch": "",
-            "history": [],
-            "is_fixed": False
-        })
+        final_state = app.invoke(initial_state(test_error))
 
         elapsed_time = time.time() - start_time
 
@@ -416,7 +491,10 @@ if __name__ == "__main__":
 
         print(f"\n📊 RESULTS:")
         print(f"  Category: {final_state['category']}")
-        print(f"  Refinements: {len(final_state['history'])}")
+        print(f"  Reviews: {len(final_state['history'])}")
+        print(f"  Refinements: {len(final_state['history']) - 1}")
+        print(f"  Passed review: {final_state['passed_review']}")
+        print(f"  Sources: {len(final_state['sources'])}")
         print(f"  Time: {elapsed_time:.1f}s")
 
         print(f"\n🛠️ FINAL SOLUTION:")
@@ -430,3 +508,4 @@ if __name__ == "__main__":
         print(f"\n❌ Error during execution: {e}")
         import traceback
         traceback.print_exc()
+        sys.exit(1)
