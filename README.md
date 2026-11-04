@@ -1,6 +1,7 @@
 # ⚡ LUMINA — AI DevOps Troubleshooter
 
 <p align="center">
+  <a href="https://github.com/SwarangiK-21/Lumina-AI-DevOps/actions/workflows/ci.yml"><img src="https://github.com/SwarangiK-21/Lumina-AI-DevOps/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <img src="https://img.shields.io/badge/Python-3.14-blue.svg" alt="Python">
   <img src="https://img.shields.io/badge/Framework-LangGraph-orange.svg" alt="LangGraph">
   <img src="https://img.shields.io/badge/LLM-Gemini_3.6_Flash-red.svg" alt="Gemini">
@@ -13,6 +14,21 @@
 LUMINA turns a pasted DevOps or software error into a cited fix proposal. It classifies the error, searches the web, drafts a fix, and has a second AI step review that draft. If the review requests changes, the feedback goes back into the next attempt.
 
 LUMINA only proposes fixes. It does not run them or change your systems.
+
+<p align="center"><img src="docs/images/ui.jpg" alt="LUMINA Streamlit interface" width="800"></p>
+
+---
+
+## 📌 Problem Statement
+
+When a build, deployment or runtime error appears, developers paste it into a search engine or a chatbot. Search returns scattered threads; a single chatbot answer is unreviewed, often uncited, and sometimes dangerous (`chmod 777`, `curl | sh`, `rm -rf`). LUMINA's goal is a fix proposal that is **classified, researched with current sources, reviewed before you see it, and honest about what was not verified**.
+
+## 🎯 Objectives
+
+1. Classify an error into a fixed category with a validated schema.
+2. Ground the fix in current web sources and cite them.
+3. Review every draft with a second AI step and feed its critique back into the next attempt.
+4. Measure the agent on a labelled benchmark with fixed, quota-free scoring rules.
 
 ---
 
@@ -95,6 +111,7 @@ evals/     Benchmark cases, scoring and reports
 cli.py     Command line entry point
 ui.py      Streamlit interface
 tests/     Automated tests
+docs/      Screenshots
 ```
 
 ---
@@ -133,6 +150,19 @@ Runs are resumable. Finished cases are saved and skipped, and the run stops clea
 
 ---
 
+## 🔭 Future Enhancements
+
+- Publish benchmark results once a full 50-case run completes on one model and commit.
+- Protect against prompt injection inside pasted logs.
+- Redact secrets in logs automatically before they are sent to the LLM or search API.
+- Optional sandboxed verification of proposed commands.
+
+## 🤝 Contributing
+
+Issues and pull requests are welcome. Run `ruff check .` and `pytest` before opening a PR, and never commit `.env` or API keys.
+
+---
+
 ## 🧑‍💻 Developer
 
-Swarangi Kothawade, Computer Science & Engineering (AI & Data Science)
+**Swarangi Kothawade** — Computer Science & Engineering (AI & Data Science) · [GitHub](https://github.com/SwarangiK-21) · [LinkedIn](https://www.linkedin.com/in/swarangikothawade/)
