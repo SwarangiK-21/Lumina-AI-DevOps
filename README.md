@@ -1,57 +1,101 @@
 # ⚡ LUMINA — AI DevOps Troubleshooter
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Python-3.10+-blue.svg" alt="Python">
+  <img src="https://img.shields.io/badge/Python-3.14-blue.svg" alt="Python">
   <img src="https://img.shields.io/badge/Framework-LangGraph-orange.svg" alt="LangGraph">
-  <img src="https://img.shields.io/badge/LLM-Gemini_2.5_Flash-red.svg" alt="Gemini">
+  <img src="https://img.shields.io/badge/LLM-Gemini_3.6_Flash-red.svg" alt="Gemini">
   <img src="https://img.shields.io/badge/Search-Tavily_AI-cyan.svg" alt="Tavily">
   <img src="https://img.shields.io/badge/UI-Streamlit-FF4B4B.svg" alt="Streamlit">
 </p>
 
-> **Diagnose. Research. Fix. Verify — Autonomously.**
+> **Diagnose. Research. Propose. Review.**
 
-LUMINA is an **Agentic AI-powered troubleshooting system** designed to solve complex DevOps, Cloud, and Software Engineering errors. Unlike standard chatbots, LUMINA operates as a **Stateful Agent** that researches real-world documentation and performs a **Self-Reflection loop** to critique and refine its own solutions before presenting them to the user.
+LUMINA turns a pasted DevOps or software error into a cited fix proposal. It classifies the error, searches the web, drafts a fix, and has a second AI step review that draft. If the review requests changes, the feedback goes back into the next attempt.
 
----
-
-## 🌟 Key Features
-
-- 🔍 **Intelligent Triage**: Automatically classifies errors (Syntax, Logic, Environment, Dependency, Permission) to determine the best fix strategy.
-- 🌐 **Real-Time Grounding**: Integrated with **Tavily AI** to browse the 2026 web for the latest documentation, GitHub issues, and StackOverflow threads.
-- 🔁 **Self-Reflection Loop**: Implements a "Reviewer Node" that acts as a Senior QA Engineer, sending solutions back for research if they are risky or incomplete.
-- 🧠 **Stateful Memory**: Uses LangGraph to track refinement history, ensuring the agent learns from "REDO" signals and converges on a perfect fix.
-- 🎯 **Developer-First UI**: A premium, high-contrast Streamlit interface focused on speed and "Progressive Disclosure" of technical details.
+LUMINA only proposes fixes. It does not run them or change your systems.
 
 ---
 
-## 🧠 Architecture & Workflow
+## 🌟 Features
 
-LUMINA utilizes a **Directed Acyclic Graph (DAG)** with feedback loops to manage the lifecycle of a bug fix:
+- 🔍 **Error classification**: Sorts errors into Syntax, Logic, Environment, Dependency or Permission using a validated schema.
+- 🌐 **Web research**: Uses Tavily to find current sources and lists them with the fix.
+- 🔁 **Review loop**: A reviewer step returns `CLEAN` or `REDO`. On `REDO`, the next attempt receives the previous fix and the feedback.
+- 🧾 **Honest results**: The UI shows whether the fix passed AI review and how many sources were used, and warns you when either is missing.
 
+---
 
+## 🧠 How It Works
 
-### The Pipeline:
-1. **Classifier**: Triages the raw error log.
-2. **Researcher**: Conducts memory-aware web searches.
-3. **Coder**: Synthesizes a comprehensive patch (Root Cause, Fix, Verification).
-4. **Reviewer**: Critiques the patch for safety and side effects.
-5. **Router**: If `CLEAN`, moves to output. If `REDO`, loops back to Research with "Lessons Learned."
+LUMINA is a LangGraph state machine with one feedback loop:
+
+```mermaid
+flowchart LR
+    A[Classifier] --> B[Researcher]
+    B --> C[Coder]
+    C --> D[Reviewer]
+    D -- CLEAN --> E[Finish]
+    D -- REDO, up to 3 reviews --> B
+    D -- Review limit reached --> E
+```
+
+1. **Classifier**: Picks one error category.
+2. **Researcher**: Searches the web, using reviewer feedback on later attempts.
+3. **Coder**: Writes the root cause, solution, verification steps and prevention tips.
+4. **Reviewer**: Checks safety, correctness, completeness and best practices.
+5. **Router**: Stops on `CLEAN` or after 3 reviews. Otherwise it loops back to research.
+
+---
+
+## 🚀 Getting Started
+
+```bash
+python -m venv venv
+source venv/bin/activate    # Windows: venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+Create a `.env` file. It is ignored by git, so never commit or upload it:
+
+```bash
+GOOGLE_API_KEY=your_key_here
+TAVILY_API_KEY=your_key_here
+```
+
+Start the app:
+
+```bash
+streamlit run ui.py
+```
+
+To run the built-in test from the command line:
+
+```bash
+python app.py
+```
+
+---
+
+## ⚠️ Current Limitations
+
+- "Passed review" means an AI approved the written fix. The fix has not been run or tested.
+- There is no accuracy benchmark yet.
+- Pasted logs are sent to Gemini and Tavily. Remove passwords, keys and private data first.
+- Logs are not yet protected against prompt injection.
+- LUMINA cannot see your code, config or live systems.
 
 ---
 
 ## 🛠️ Tech Stack
 
-- **Orchestration**: [LangGraph](https://github.com/langchain-ai/langgraph) (State Machine)
-- **Brain**: Google Gemini 2.5 Flash
-- **Search**: Tavily AI (Agent-specialized search)
-- **Framework**: LangChain
+- **Orchestration**: [LangGraph](https://github.com/langchain-ai/langgraph)
+- **LLM**: Google Gemini 3.6 Flash
+- **Search**: Tavily AI
+- **Validation**: Pydantic
 - **Interface**: Streamlit
-- **Language**: Python 3.10+
 
 ---
 
 ## 🧑‍💻 Developer
-Swarangi Kothawade Computer Science & Engineering (AI & Data Science) LinkedIn | GitHub
 
-⭐ Vision
-Toward self-healing software systems—where AI doesn't just assist the developer, but autonomously maintains the health of the cloud infrastructure. 🚀
+Swarangi Kothawade, Computer Science & Engineering (AI & Data Science)

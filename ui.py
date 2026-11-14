@@ -4,7 +4,7 @@ Balanced Modern Design - Professional & Engaging without being overdone
 """
 
 import streamlit as st
-from app import app
+from app import app, initial_state
 import time
 
 # ============================================================================
@@ -265,7 +265,7 @@ with st.sidebar:
     1. **Analyze** — Categorize the error type
     2. **Research** — Find solutions from real docs
     3. **Generate** — Create a tailored fix
-    4. **Review** — Verify safety & completeness
+    4. **Review** — AI check of safety & completeness
     """)
 
     st.divider()
@@ -294,8 +294,6 @@ with st.sidebar:
 # MAIN CONTENT
 # ============================================================================
 
-# FIX 6: st.columns([1]) returns a list with one element — you must unpack it
-# or just write the content directly without columns when there's only one column.
 st.markdown('<h1 class="main-header">🧑🏻‍💻 LUMINA</h1>', unsafe_allow_html=True)
 st.markdown('<p class="subtitle-text">// AI DevOps Troubleshooter</p>', unsafe_allow_html=True)
 
@@ -319,8 +317,6 @@ with col_status:
 
 st.divider()
 
-# FIX 7: Button layout — st.columns() with a list returns that many columns.
-# [1, 2, 1] gives 3 columns; index [1] is the middle one. This is correct usage.
 col_left, col_mid, col_right = st.columns([1, 2, 1])
 with col_mid:
     submit_button = st.button(
@@ -343,14 +339,7 @@ if submit_button:
     try:
         start_time = time.time()
 
-        result = app.invoke({
-            "input": error_input,
-            "history": [],
-            "category": "",
-            "research_notes": "",
-            "generated_patch": "",
-            "is_fixed": False
-        })
+        result = app.invoke(initial_state(error_input))
 
         elapsed_time = time.time() - start_time
 
@@ -361,7 +350,10 @@ if submit_button:
         # METRICS
         st.markdown("### 📊 **Results**")
 
-        m1, m2, m3 = st.columns(3, gap="large")
+        history = result.get('history', [])
+        sources = result.get('sources', [])
+
+        m1, m2, m3, m4 = st.columns(4, gap="large")
 
         with m1:
             st.metric(
@@ -371,7 +363,7 @@ if submit_button:
             )
 
         with m2:
-            refinements = max(0, len(result.get('history', [])) - 1)
+            refinements = max(0, len(history) - 1)
             st.metric(
                 "Refinements",
                 f"{refinements}",
@@ -379,28 +371,32 @@ if submit_button:
             )
 
         with m3:
-            is_clean = "CLEAN" in str(result.get('history', []))
-            confidence = "High" if is_clean else "Medium"
             st.metric(
-                "Confidence",
-                confidence,
-                help="Solution verification"
+                "AI Review",
+                "Passed" if result.get('passed_review') else "Not passed",
+                help="A second AI check of the written fix. The fix has not been run."
             )
+
+        with m4:
+            st.metric(
+                "Web Sources",
+                f"{len(sources)}",
+                help="Sources available to the final solution"
+            )
+
+        if not result.get('passed_review') and history:
+            st.warning(f"**This fix did not pass AI review.** {history[-1]['feedback']}")
+
+        if not sources:
+            st.warning("**No web sources were found.** This fix relies on the model's own knowledge.")
 
         st.divider()
 
         # SOLUTION
         st.markdown("### 🛠️ **Solution**")
 
-        # FIX 8: st.container(border=True) requires Streamlit >= 1.28.
-        # Using a try/except makes it backward-compatible with older versions.
-        try:
-            with st.container(border=True):
-                st.markdown(result.get("generated_patch", "No solution generated"))
-        except TypeError:
-            # Older Streamlit version — border param not supported
-            with st.container():
-                st.markdown(result.get("generated_patch", "No solution generated"))
+        with st.container(border=True):
+            st.markdown(result.get("generated_patch", "No solution generated"))
 
         st.divider()
 
@@ -410,28 +406,30 @@ if submit_button:
         c1, c2, c3 = st.columns(3, gap="large")
 
         with c1:
-            with st.expander("🧠 **Reasoning**"):
-                history = result.get('history', [])
-                if history:
-                    for i, step in enumerate(history, 1):
-                        if "CLEAN" in step:
-                            st.success(f"Loop {i}: Verified")
-                        elif "REDO" in step:
-                            st.warning(f"Loop {i}: Refined")
-                        st.caption(step[:100] + "..." if len(step) > 100 else step)
-                else:
-                    st.info("First attempt - no revisions")
+            with st.expander("🧠 **Reviews**"):
+                for i, review in enumerate(history, 1):
+                    if review["verdict"] == "CLEAN":
+                        st.success(f"Review {i}: Passed")
+                    else:
+                        st.warning(f"Review {i}: Changes requested")
+                    st.caption(review["feedback"])
 
         with c2:
-            with st.expander("📖 **Research**"):
-                research = result.get("research_notes", "No data")
-                st.code(research[:400] + "..." if len(research) > 400 else research)
+            with st.expander("📖 **Sources**"):
+                if sources:
+                    for i, source in enumerate(sources, 1):
+                        st.markdown(f"[{i}] [{source['title']}]({source['url']})")
+                else:
+                    st.info("No web sources")
 
         with c3:
             with st.expander("⚙️ **Stats**"):
                 st.json({
                     "category": result.get('category'),
-                    "refinement_loops": len(result.get('history', [])),
+                    "reviews": len(history),
+                    "refinements": refinements,
+                    "passed_review": result.get('passed_review'),
+                    "sources": len(sources),
                     "processing_time_ms": int(elapsed_time * 1000)
                 })
 
@@ -439,21 +437,18 @@ if submit_button:
 
         # NEXT STEPS
         st.markdown("### 🚀 **Next Steps**")
-        st.info("✓ Review the solution | ✓ Test in your environment | ✓ Deploy with confidence")
+        st.info("LUMINA has not run this fix. Read each command and test it somewhere safe before using it in production.")
 
     except Exception as e:
         error_str = str(e)
         status_container.error("❌ Error")
 
         if "RESOURCE_EXHAUSTED" in error_str or "429" in error_str:
-            st.error("**API Quota Exceeded**")
-            st.markdown("""
-            1. Upgrade your Google Cloud plan
-            2. Wait 24 hours for free tier reset
-            3. Switch to OpenAI or Claude API
-            """)
-        elif "TAVILY" in error_str:
-            st.error("**Search Service Error**")
+            st.error("**Gemini Rate Limit or Quota Reached**")
+            st.markdown("Wait a minute and try again. If it keeps happening, check your plan's quota.")
+        elif any(code in error_str for code in ("503", "504", "UNAVAILABLE", "DEADLINE_EXCEEDED")):
+            st.error("**Gemini Is Busy Right Now**")
+            st.markdown("This is usually temporary. Please try again shortly.")
         elif "No module named" in error_str:
             st.error("**Missing Package**")
             st.markdown("```bash\npip install -r requirements.txt\n```")
