@@ -55,12 +55,7 @@ source venv/bin/activate    # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-Create a `.env` file. It is ignored by git, so never commit or upload it:
-
-```bash
-GOOGLE_API_KEY=your_key_here
-TAVILY_API_KEY=your_key_here
-```
+Copy `.env.example` to `.env` and add your keys. `.env` is ignored by git, so never commit or upload it.
 
 Start the app:
 
@@ -68,10 +63,37 @@ Start the app:
 streamlit run ui.py
 ```
 
-To run the built-in test from the command line:
+Or use the command line, with your own error or the built-in sample:
 
 ```bash
-python app.py
+python cli.py "ModuleNotFoundError: No module named 'requests'"
+```
+
+Or run it in Docker:
+
+```bash
+docker build -t lumina .
+docker run --env-file .env -p 8501:8501 lumina
+```
+
+---
+
+## 🧪 Development
+
+```bash
+pip install -r requirements-dev.txt
+ruff check .
+pytest
+```
+
+The tests use fake LLM and search services, so they need no API keys and make no paid calls. GitHub Actions runs linting, tests and a Docker build on every pull request.
+
+```text
+agent/     Workflow, nodes, schemas and Gemini access
+tools/     Web search
+cli.py     Command line entry point
+ui.py      Streamlit interface
+tests/     Automated tests
 ```
 
 ---
@@ -80,6 +102,7 @@ python app.py
 
 - "Passed review" means an AI approved the written fix. The fix has not been run or tested.
 - There is no accuracy benchmark yet.
+- Each run makes 4 to 7 Gemini requests. A free-tier key with a limit of 20 requests a day allows only a few runs.
 - Pasted logs are sent to Gemini and Tavily. Remove passwords, keys and private data first.
 - Logs are not yet protected against prompt injection.
 - LUMINA cannot see your code, config or live systems.

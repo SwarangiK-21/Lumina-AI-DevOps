@@ -3,9 +3,16 @@ LUMINA UI - AI DevOps Agent
 Balanced Modern Design - Professional & Engaging without being overdone
 """
 
-import streamlit as st
-from app import app, initial_state
+import logging
 import time
+
+import streamlit as st
+
+from agent.config import DAILY_QUOTA_MARKER, ConfigError
+from agent.graph import run_agent
+
+logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+logger = logging.getLogger(__name__)
 
 # ============================================================================
 # PAGE CONFIG
@@ -339,7 +346,7 @@ if submit_button:
     try:
         start_time = time.time()
 
-        result = app.invoke(initial_state(error_input))
+        result = run_agent(error_input)
 
         elapsed_time = time.time() - start_time
 
@@ -405,33 +412,30 @@ if submit_button:
 
         c1, c2, c3 = st.columns(3, gap="large")
 
-        with c1:
-            with st.expander("🧠 **Reviews**"):
-                for i, review in enumerate(history, 1):
-                    if review["verdict"] == "CLEAN":
-                        st.success(f"Review {i}: Passed")
-                    else:
-                        st.warning(f"Review {i}: Changes requested")
-                    st.caption(review["feedback"])
-
-        with c2:
-            with st.expander("📖 **Sources**"):
-                if sources:
-                    for i, source in enumerate(sources, 1):
-                        st.markdown(f"[{i}] [{source['title']}]({source['url']})")
+        with c1, st.expander("🧠 **Reviews**"):
+            for i, review in enumerate(history, 1):
+                if review["verdict"] == "CLEAN":
+                    st.success(f"Review {i}: Passed")
                 else:
-                    st.info("No web sources")
+                    st.warning(f"Review {i}: Changes requested")
+                st.caption(review["feedback"])
 
-        with c3:
-            with st.expander("⚙️ **Stats**"):
-                st.json({
-                    "category": result.get('category'),
-                    "reviews": len(history),
-                    "refinements": refinements,
-                    "passed_review": result.get('passed_review'),
-                    "sources": len(sources),
-                    "processing_time_ms": int(elapsed_time * 1000)
-                })
+        with c2, st.expander("📖 **Sources**"):
+            if sources:
+                for i, source in enumerate(sources, 1):
+                    st.markdown(f"[{i}] [{source['title']}]({source['url']})")
+            else:
+                st.info("No web sources")
+
+        with c3, st.expander("⚙️ **Stats**"):
+            st.json({
+                "category": result.get('category'),
+                "reviews": len(history),
+                "refinements": refinements,
+                "passed_review": result.get('passed_review'),
+                "sources": len(sources),
+                "processing_time_ms": int(elapsed_time * 1000)
+            })
 
         st.divider()
 
@@ -440,12 +444,19 @@ if submit_button:
         st.info("LUMINA has not run this fix. Read each command and test it somewhere safe before using it in production.")
 
     except Exception as e:
+        logger.exception("Run failed")
         error_str = str(e)
         status_container.error("❌ Error")
 
-        if "RESOURCE_EXHAUSTED" in error_str or "429" in error_str:
-            st.error("**Gemini Rate Limit or Quota Reached**")
-            st.markdown("Wait a minute and try again. If it keeps happening, check your plan's quota.")
+        if isinstance(e, ConfigError):
+            st.error("**Setup Needed**")
+            st.markdown(error_str)
+        elif DAILY_QUOTA_MARKER in error_str:
+            st.error("**Daily Gemini Quota Used**")
+            st.markdown("The quota resets daily. Try again after the reset, or upgrade your Gemini plan.")
+        elif "RESOURCE_EXHAUSTED" in error_str or "429" in error_str:
+            st.error("**Gemini Rate Limit Reached**")
+            st.markdown("Wait a minute and try again.")
         elif any(code in error_str for code in ("503", "504", "UNAVAILABLE", "DEADLINE_EXCEEDED")):
             st.error("**Gemini Is Busy Right Now**")
             st.markdown("This is usually temporary. Please try again shortly.")
