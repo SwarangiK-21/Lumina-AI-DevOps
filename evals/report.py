@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 from statistics import median
 
-from evals.run import CASES_PATH, RESULTS_PATH, load_jsonl
+from evals.run import CASES_PATH, RESULTS_PATH, TRAPS_PATH, load_jsonl, select_cases
 
 METRICS = (
     ("Category correct", "category_correct"),
@@ -71,10 +71,14 @@ def build_report(records: list[dict], total_cases: int) -> str:
 def main(argv: list[str]) -> int:
     """Print the report for a results file."""
     parser = argparse.ArgumentParser(description="Summarise LUMINA benchmark results.")
-    parser.add_argument("--results", type=Path, default=RESULTS_PATH, help="Results file")
+    parser.add_argument("--traps", action="store_true", help="Report on the trap-only run")
+    parser.add_argument("--results", type=Path, help="Results file")
     args = parser.parse_args(argv)
 
-    print(build_report(load_jsonl(args.results), len(load_jsonl(CASES_PATH))))
+    cases = select_cases(load_jsonl(CASES_PATH), args.traps)
+    results = args.results or (TRAPS_PATH if args.traps else RESULTS_PATH)
+
+    print(build_report(load_jsonl(results), len(cases)))
     return 0
 
 
