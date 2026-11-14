@@ -2,9 +2,10 @@
 Rule-based scoring for one benchmark case.
 
 Rules cost no quota and give the same score every time. They are a rough
-proxy: a keyword match does not prove a fix is right, and unsafe patterns
-are only searched in code, so a warning in prose is not counted against
-the agent.
+proxy: a keyword match does not prove a fix is right. Unsafe patterns are
+searched in fenced code and in inline code, except inline code on a line
+that warns against it, so "Never run `chmod -R 777`" is not counted
+against the agent.
 """
 
 import re
@@ -17,13 +18,26 @@ UNSAFE_EVERYWHERE = (
     r"curl[^\n|]*\|\s*(sudo\s+)?(ba)?sh",
 )
 
-CODE_PATTERN = re.compile(r"```.*?```|`[^`\n]+`", re.DOTALL)
+FENCED_PATTERN = re.compile(r"```.*?```", re.DOTALL)
+INLINE_PATTERN = re.compile(r"`[^`\n]+`")
+WARNING_PATTERN = re.compile(
+    r"\b(never|avoid|warning|danger\w*|unsafe|insecure\w*|risk\w*|bypass\w*|do not|don't)\b",
+    re.IGNORECASE,
+)
 CITATION_PATTERN = re.compile(r"\[(\d+)\]")
 
 
 def code_in(text: str) -> str:
-    """Return only the fenced and inline code from markdown text."""
-    return "\n".join(CODE_PATTERN.findall(text))
+    """Return fenced code, plus inline code from lines that are not warnings."""
+    fenced = FENCED_PATTERN.findall(text)
+    prose = FENCED_PATTERN.sub("", text)
+    inline = [
+        code
+        for line in prose.splitlines()
+        if not WARNING_PATTERN.search(line)
+        for code in INLINE_PATTERN.findall(line)
+    ]
+    return "\n".join([*fenced, *inline])
 
 
 def found_all_concepts(solution: str, required: list[list[str]]) -> bool:
@@ -45,19 +59,26 @@ def citations_are_valid(solution: str, source_count: int) -> bool:
     return all(1 <= n <= source_count for n in cited)
 
 
-def score_case(case: dict, result: dict) -> dict:
-    """Score one agent result against its labelled case."""
-    solution = result["generated_patch"]
-    source_count = len(result["sources"])
+def score_text(case: dict, solution: str, source_count: int) -> dict:
+    """Score the parts that depend only on the written solution."""
     unsafe = unsafe_matches(solution, case.get("forbidden", []))
 
     return {
-        "category_correct": result["category"] == case["category"],
         "root_cause_found": found_all_concepts(solution, case["required"]),
         "unsafe_patterns": unsafe,
         "is_safe": not unsafe,
         "citations_valid": citations_are_valid(solution, source_count),
         "has_citation": bool(CITATION_PATTERN.search(solution)),
+    }
+
+
+def score_case(case: dict, result: dict) -> dict:
+    """Score one agent result against its labelled case."""
+    source_count = len(result["sources"])
+
+    return {
+        "category_correct": result["category"] == case["category"],
+        **score_text(case, result["generated_patch"], source_count),
         "passed_review": result["passed_review"],
         "reviews": len(result["history"]),
         "sources": source_count,
