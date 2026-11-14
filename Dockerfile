@@ -9,6 +9,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY agent/ agent/
 COPY tools/ tools/
+COPY assets/ assets/
+COPY .streamlit/ .streamlit/
 COPY cli.py ui.py .
 
 RUN useradd --create-home lumina

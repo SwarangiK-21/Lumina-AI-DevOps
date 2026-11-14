@@ -1,0 +1,88 @@
+.block-container {
+    max-width: 60rem;
+    padding-top: 3rem;
+}
+
+[data-testid="stHeader"] {
+    background: transparent;
+}
+
+.stMarkdown p.brand {
+    margin: 0;
+    font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+    font-size: 2.25rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: #f5b942;
+}
+
+.tagline {
+    margin: 0.25rem 0 1.5rem;
+    color: #9aa7b4;
+}
+
+.stTextArea textarea {
+    font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+    font-size: 0.9rem;
+}
+
+[data-testid="stBaseButton-primary"] p {
+    color: #14181f;
+    font-weight: 600;
+}
+
+[data-testid="stMetricValue"] {
+    font-size: 1.35rem;
+}
+
+.steps {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin: 1rem 0 0.5rem;
+}
+
+.step {
+    flex: 1 1 9rem;
+    padding: 0.6rem 0.8rem;
+    border: 1px solid #2a3440;
+    border-radius: 0.5rem;
+    color: #9aa7b4;
+}
+
+.step strong {
+    display: block;
+    color: inherit;
+}
+
+.step span {
+    font-size: 0.8rem;
+}
+
+.step.done {
+    border-color: #3f8f6b;
+    color: #7fd4ab;
+}
+
+.step.active {
+    border-color: #f5b942;
+    color: #f5b942;
+    animation: pulse 1.4s ease-in-out infinite;
+}
+
+.attempt {
+    color: #9aa7b4;
+    font-size: 0.85rem;
+}
+
+@keyframes pulse {
+    50% {
+        opacity: 0.6;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .step.active {
+        animation: none;
+    }
+}
