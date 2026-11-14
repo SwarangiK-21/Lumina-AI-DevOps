@@ -83,6 +83,33 @@ def test_last_verdict_decides_after_failed_review(use_llm, use_search):
     assert result_llm.reviews == []
 
 
+RISKY_PATCH = "Run:\n```bash\nkubectl --insecure-skip-tls-verify get pods\n```"
+
+
+def test_risky_fix_is_sent_back_without_an_ai_review(use_llm, use_search):
+    llm = use_llm([clean()], patches=[RISKY_PATCH, "Renew the certificate."])
+
+    result = run_agent("x509: certificate has expired")
+
+    first, second = result["history"]
+    assert first["checked_by"] == "rules" and first["verdict"] == "REDO"
+    assert "insecure-skip-tls-verify" in llm.coder_prompts()[1]
+    assert second["checked_by"] == "ai"
+    assert result["passed_review"] is True
+    assert result["safety_issues"] == []
+
+
+def test_fix_that_stays_risky_never_passes(use_llm, use_search):
+    llm = use_llm([], patches=[RISKY_PATCH] * 3)
+
+    result = run_agent("x509: certificate has expired")
+
+    assert result["passed_review"] is False
+    assert len(result["history"]) == 3
+    assert "turns off TLS certificate checks" in result["safety_issues"][0]
+    assert not [p for p in llm.prompts if "Security Engineer" in p]
+
+
 def test_invalid_category_is_rejected():
     with pytest.raises(ValidationError):
         Classification(category="Sure! It might be ENVIRONMENT_ERROR")

@@ -42,6 +42,9 @@ def main(argv: list[str]) -> int:
     print(f"  Sources: {len(result['sources'])}")
     print(f"  Time: {elapsed_time:.1f}s")
 
+    for issue in result["safety_issues"]:
+        print(f"  UNSAFE: {issue}")
+
     print("\nSOLUTION")
     print("-" * 60)
     print(result["generated_patch"])

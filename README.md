@@ -37,6 +37,7 @@ When a build, deployment or runtime error appears, developers paste it into a se
 - 🔍 **Error classification**: Sorts errors into Syntax, Logic, Environment, Dependency or Permission using a validated schema.
 - 🌐 **Web research**: Uses Tavily to find current sources and lists them with the fix.
 - 🔁 **Review loop**: A reviewer step returns `CLEAN` or `REDO`. On `REDO`, the next attempt receives the previous fix and the feedback.
+- 🛡️ **Safety rules**: Before the AI review, fixed rules check the fix's commands for known dangers, such as turning off TLS checks or `chmod 777`. A match sends the fix back, and if it never goes away the UI shows it in red. The benchmark found the AI reviewer approving one such command, which is why these rules exist.
 - 🧾 **Honest results**: The UI shows whether the fix passed AI review and how many sources were used, and warns you when either is missing.
 
 ---

@@ -51,6 +51,10 @@ def build_report(records: list[dict], total_cases: int) -> str:
     lines.append(f"Median seconds per case: {median(r['seconds'] for r in records):.1f}")
     lines.append(f"Refined at least once: {sum(1 for r in records if r['reviews'] > 1)}/{len(records)}")
 
+    # Older results were saved before the safety rules existed
+    if any("safety_redos" in r for r in records):
+        lines.append(f"Sent back by safety rules: {sum(1 for r in records if r.get('safety_redos'))}/{len(records)}")
+
     lines.extend(["", "By category (root cause found):"])
     for category in sorted({record["category"] for record in records}):
         group = [record for record in records if record["category"] == category]
