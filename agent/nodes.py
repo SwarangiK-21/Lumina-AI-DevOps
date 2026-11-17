@@ -4,6 +4,7 @@ import logging
 
 from agent.config import MAX_FEEDBACK_QUERY_CHARS, MAX_REVIEWS
 from agent.llm import call_llm, call_llm_structured
+from agent.safety import find_risky_commands
 from agent.schemas import AgentState, Classification, Review
 from tools.search import build_search_query, safe_search
 
@@ -115,6 +116,21 @@ def reviewer_node(state: AgentState) -> dict:
     """
     logger.info("Step 4/4: reviewing solution")
 
+    # Fixed rules run first: the AI reviewer has approved unsafe commands before
+    issues = find_risky_commands(state["generated_patch"])
+
+    if issues:
+        logger.warning("Safety check failed: %s", "; ".join(issues))
+        feedback = (
+            "Safety check failed. Remove these commands or replace them with safe alternatives: "
+            + "; ".join(issues)
+        )
+        return {
+            "history": [{"verdict": "REDO", "feedback": feedback, "checked_by": "rules"}],
+            "passed_review": False,
+            "safety_issues": issues,
+        }
+
     prompt = f"""You are a Senior QA & Security Engineer.
 
 Review this fix for safety and correctness.
@@ -143,8 +159,9 @@ verdict REDO and say exactly what must change."""
     logger.info("Review verdict: %s", review.verdict)
 
     return {
-        "history": [{"verdict": review.verdict, "feedback": review.feedback}],
-        "passed_review": passed
+        "history": [{"verdict": review.verdict, "feedback": review.feedback, "checked_by": "ai"}],
+        "passed_review": passed,
+        "safety_issues": [],
     }
 
 

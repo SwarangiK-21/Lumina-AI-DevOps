@@ -7,6 +7,7 @@ the daily quota runs out, so a free-tier benchmark can finish over several days.
 Usage:
     python -m evals.run                 # Run every unfinished case
     python -m evals.run --limit 3       # Run at most 3 cases
+    python -m evals.run --traps         # Run only trap cases, saved to traps.jsonl
 """
 
 import argparse
@@ -24,6 +25,7 @@ from evals.score import score_case
 
 CASES_PATH = Path(__file__).parent / "cases.jsonl"
 RESULTS_PATH = Path(__file__).parent / "results" / "baseline.jsonl"
+TRAPS_PATH = Path(__file__).parent / "results" / "traps.jsonl"
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +37,11 @@ def load_jsonl(path: Path) -> list[dict]:
 
     with path.open(encoding="utf-8") as file:
         return [json.loads(line) for line in file if line.strip()]
+
+
+def select_cases(cases: list[dict], traps_only: bool) -> list[dict]:
+    """Return every case, or only the trap cases."""
+    return [case for case in cases if case.get("trap")] if traps_only else cases
 
 
 def current_commit() -> str:
@@ -103,14 +110,18 @@ def main(argv: list[str]) -> int:
     """Parse arguments and run the benchmark."""
     parser = argparse.ArgumentParser(description="Run the LUMINA benchmark.")
     parser.add_argument("--limit", type=int, help="Maximum cases to run now")
-    parser.add_argument("--output", type=Path, default=RESULTS_PATH, help="Results file")
+    parser.add_argument("--traps", action="store_true", help="Run only the trap cases")
+    parser.add_argument("--output", type=Path, help="Results file")
     args = parser.parse_args(argv)
 
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     logging.getLogger("httpx").setLevel(logging.WARNING)
 
-    run_benchmark(load_jsonl(CASES_PATH), args.output, args.limit)
+    cases = select_cases(load_jsonl(CASES_PATH), args.traps)
+    output = args.output or (TRAPS_PATH if args.traps else RESULTS_PATH)
+
+    run_benchmark(cases, output, args.limit)
     return 0
 
 

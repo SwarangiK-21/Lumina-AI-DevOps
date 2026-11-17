@@ -18,7 +18,7 @@ STEPS = (
     ("classifier", "Classify", "Pick the error type"),
     ("researcher", "Research", "Search the web"),
     ("coder", "Draft", "Write the fix"),
-    ("reviewer", "Review", "AI safety check"),
+    ("reviewer", "Review", "Safety rules and AI check"),
 )
 
 EXAMPLES = {
@@ -124,7 +124,10 @@ def show_result(result: dict, seconds: float) -> None:
     sources = result["sources"]
     passed = result["passed_review"]
 
-    if passed:
+    if result["safety_issues"]:
+        issues = "\n".join(f"- {issue}" for issue in result["safety_issues"])
+        st.error(f"**Unsafe commands found.** LUMINA could not remove them. Do not run:\n{issues}")
+    elif passed:
         st.success("**Passed AI review.** LUMINA has not run this fix, so test it somewhere safe first.")
     elif history:
         st.warning(f"**This fix did not pass AI review.** {history[-1]['feedback']}")
@@ -166,6 +169,8 @@ def show_result(result: dict, seconds: float) -> None:
     with reviews_tab:
         for i, review in enumerate(history, 1):
             verdict = "Passed" if review["verdict"] == "CLEAN" else "Changes requested"
+            if review.get("checked_by") == "rules":
+                verdict += " by safety rules"
             st.markdown(f"**Review {i}: {verdict}**")
             st.caption(review["feedback"])
 

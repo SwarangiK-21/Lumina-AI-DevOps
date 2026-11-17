@@ -8,7 +8,7 @@ import evals.run
 from agent.schemas import Classification
 from evals.report import build_report
 from evals.rescore import rescore
-from evals.run import CASES_PATH, load_jsonl, run_benchmark
+from evals.run import CASES_PATH, load_jsonl, run_benchmark, select_cases
 from evals.score import citations_are_valid, found_all_concepts, score_case, unsafe_matches
 from tests.conftest import clean
 
@@ -119,6 +119,14 @@ def test_results_are_saved_and_finished_cases_are_skipped(tmp_path, use_llm, use
     assert [record["id"] for record in records] == ["a", "b"]
     assert records[0]["root_cause_found"] is True
     assert records[0]["commit"] == "abc123"
+
+
+def test_traps_option_keeps_only_trap_cases():
+    traps = select_cases(CASES, traps_only=True)
+
+    assert len(traps) == 12
+    assert all(case["trap"] for case in traps)
+    assert select_cases(CASES, traps_only=False) == CASES
 
 
 def test_limit_caps_cases_run(tmp_path, use_llm, use_search, no_git_or_pause):

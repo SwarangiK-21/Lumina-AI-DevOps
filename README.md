@@ -11,11 +11,11 @@
 
 > **Diagnose. Research. Propose. Review.**
 
-LUMINA turns a pasted DevOps or software error into a cited fix proposal. It classifies the error, searches the web, drafts a fix, and has a second AI step review that draft. If the review requests changes, the feedback goes back into the next attempt.
+LUMINA turns a pasted DevOps or software error into a cited fix proposal. It classifies the error, searches the web, drafts a fix, checks the fix's commands against fixed safety rules, and has a second AI step review it. If either check requests changes, the feedback goes back into the next attempt.
 
 LUMINA only proposes fixes. It does not run them or change your systems.
 
-<p align="center"><img src="docs/images/ui.jpg" alt="LUMINA Streamlit interface" width="800"></p>
+<p align="center"><img src="docs/images/ui.jpg" alt="LUMINA interface with a reviewed fix" width="800"></p>
 
 ---
 
@@ -27,8 +27,8 @@ When a build, deployment or runtime error appears, developers paste it into a se
 
 1. Classify an error into a fixed category with a validated schema.
 2. Ground the fix in current web sources and cite them.
-3. Review every draft with a second AI step and feed its critique back into the next attempt.
-4. Measure the agent on a labelled benchmark with fixed, quota-free scoring rules.
+3. Review every draft and feed the critique back into the next attempt.
+4. Measure the agent on a labelled benchmark with fixed, quota-free scoring rules, and fix what it finds.
 
 ---
 
@@ -36,8 +36,12 @@ When a build, deployment or runtime error appears, developers paste it into a se
 
 - 🔍 **Error classification**: Sorts errors into Syntax, Logic, Environment, Dependency or Permission using a validated schema.
 - 🌐 **Web research**: Uses Tavily to find current sources and lists them with the fix.
-- 🔁 **Review loop**: A reviewer step returns `CLEAN` or `REDO`. On `REDO`, the next attempt receives the previous fix and the feedback.
-- 🧾 **Honest results**: The UI shows whether the fix passed AI review and how many sources were used, and warns you when either is missing.
+- 🔁 **Review loop**: A reviewer step returns `CLEAN` or `REDO`. On `REDO`, the next attempt receives the previous fix and the feedback, for up to 3 reviews.
+- 🛡️ **Safety rules**: Before the AI review, 13 fixed rules check the fix's commands for known dangers, such as turning off TLS checks, `chmod 777` or piping a download into `bash`. A match sends the fix back with the reason. If it never goes away, the UI shows the commands in red. The benchmark found the AI reviewer approving one such command, which is why these rules exist.
+- ⏱️ **Live progress**: The interface lights up each step (Classify, Research, Draft, Review) as it finishes and shows when a fix is being reworked.
+- 🧾 **Honest results**: The UI shows whether the fix passed review and how many sources were used, and warns you when either is missing. Results can be downloaded as Markdown.
+
+<p align="center"><img src="docs/images/result.jpg" alt="A proposed fix with cited sources" width="800"></p>
 
 ---
 
@@ -49,17 +53,54 @@ LUMINA is a LangGraph state machine with one feedback loop:
 flowchart LR
     A[Classifier] --> B[Researcher]
     B --> C[Coder]
-    C --> D[Reviewer]
+    C --> S{Safety rules}
+    S -- risky command --> B
+    S -- clear --> D[AI reviewer]
     D -- CLEAN --> E[Finish]
-    D -- REDO, up to 3 reviews --> B
+    D -- REDO --> B
     D -- Review limit reached --> E
 ```
 
 1. **Classifier**: Picks one error category.
-2. **Researcher**: Searches the web, using reviewer feedback on later attempts.
+2. **Researcher**: Searches the web, using review feedback on later attempts.
 3. **Coder**: Writes the root cause, solution, verification steps and prevention tips.
-4. **Reviewer**: Checks safety, correctness, completeness and best practices.
+4. **Reviewer**: First runs the fixed safety rules over the fix's commands. If they find nothing, an AI reviewer checks safety, correctness, completeness and best practices.
 5. **Router**: Stops on `CLEAN` or after 3 reviews. Otherwise it loops back to research.
+
+---
+
+## 📊 Benchmark Results
+
+`evals/cases.jsonl` holds 50 hand-labelled errors, 10 per category. 12 of them are **trap cases** that invite a dangerous fix, such as an expired certificate where the quick answer is to turn off TLS checks. Each answer is scored by fixed rules, so scoring costs no quota and gives the same result every time.
+
+**Baseline**: all 50 cases on `gemini-3.6-flash`, before the safety rules existed.
+
+| Metric | Result |
+|---|---|
+| Root cause found | 50/50 (100%) |
+| Error category correct | 47/50 (94%) |
+| Citations point at real sources | 49/50 (98%) |
+| Passed AI review | 50/50 (100%) |
+| Safe on trap cases | 11/12 (92%) |
+| Median time per case | 35 s |
+
+**What it found**: in the one unsafe case, LUMINA proposed `--insecure-skip-tls-verify` for an expired Kubernetes certificate, and **the AI reviewer approved it**. An AI review alone is not a reliable safety check, so the fixed safety rules now run first. Run over the 50 saved baseline answers, the rules flag only that case and none of the other 49.
+
+**Scoring correction**: the first scoring reported 9/12 trap cases safe. Two of those flags were commands that LUMINA had quoted inside a warning ("Never run `rm -rf …`"). The scorer was fixed and the saved answers were rescored offline, with no new model calls. Both versions are in the git history.
+
+**Trap rerun with safety rules**: in progress. 7 of 12 trap cases have been rerun so far, with no unsafe fixes. This section will be updated when all 12 finish. The rules were written after seeing the unsafe case, so catching it is expected; the useful evidence is that they block nothing safe.
+
+Run the benchmark yourself:
+
+```bash
+python -m evals.run --limit 3        # Run up to 3 unfinished cases
+python -m evals.report               # Summarise saved results
+python -m evals.run --traps          # Run only the 12 trap cases
+python -m evals.report --traps
+python -m evals.rescore              # Reapply text rules to saved answers, no model calls
+```
+
+Runs are resumable. Finished cases are saved and skipped, and the run stops cleanly when the daily quota ends, so a free-tier benchmark can finish over several days. Compare results only when they share a model and code version.
 
 ---
 
@@ -105,33 +146,23 @@ pytest
 The tests use fake LLM and search services, so they need no API keys and make no paid calls. GitHub Actions runs linting, tests and a Docker build on every pull request.
 
 ```text
-agent/     Workflow, nodes, schemas and Gemini access
-tools/     Web search
-evals/     Benchmark cases, scoring and reports
-cli.py     Command line entry point
-ui.py      Streamlit interface
-tests/     Automated tests
-docs/      Screenshots
+agent/        Workflow, nodes, safety rules, schemas and Gemini access
+tools/        Web search
+evals/        Benchmark cases, runner, scoring, rescoring, reports and results
+cli.py        Command line entry point
+ui.py         Streamlit interface
+assets/       Interface stylesheet
+.streamlit/   Interface theme
+tests/        Automated tests
+docs/         Screenshots
 ```
-
----
-
-## 📊 Benchmark
-
-`evals/cases.jsonl` holds 50 hand-labelled errors, 10 per category, including trap cases that invite a dangerous fix. Each result is scored by fixed rules for category, root-cause keywords, unsafe commands in code, and valid citations.
-
-```bash
-python -m evals.run --limit 3
-python -m evals.report
-```
-
-Runs are resumable. Finished cases are saved and skipped, and the run stops cleanly when the daily quota ends, so a free-tier benchmark can finish over several days. Compare results only when they share a model and commit.
 
 ---
 
 ## ⚠️ Current Limitations
 
-- "Passed review" means an AI approved the written fix. The fix has not been run or tested.
+- "Passed review" means the safety rules and an AI approved the written fix. The fix has not been run or tested.
+- The safety rules only know the dangers they list. A dangerous command they do not cover can still pass if the AI reviewer misses it.
 - The benchmark uses hand-written cases and keyword rules, so its scores are a rough guide, not proof of correctness.
 - Each run makes 4 to 7 Gemini requests. A free-tier key with a limit of 20 requests a day allows only a few runs.
 - Pasted logs are sent to Gemini and Tavily. Remove passwords, keys and private data first.
@@ -147,12 +178,13 @@ Runs are resumable. Finished cases are saved and skipped, and the run stops clea
 - **Search**: Tavily AI
 - **Validation**: Pydantic
 - **Interface**: Streamlit
+- **Quality**: pytest, Ruff, Docker and GitHub Actions
 
 ---
 
 ## 🔭 Future Enhancements
 
-- Publish benchmark results once a full 50-case run completes on one model and commit.
+- Publish the trap rerun results with the safety rules, then rerun all 50 cases.
 - Protect against prompt injection inside pasted logs.
 - Redact secrets in logs automatically before they are sent to the LLM or search API.
 - Optional sandboxed verification of proposed commands.

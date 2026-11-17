@@ -26,7 +26,7 @@ def run_ui(monkeypatch, run_agent):
     return page
 
 
-def agent_result(passed, sources):
+def agent_result(passed, sources, safety_issues=()):
     verdict = "CLEAN" if passed else "REDO"
     return {
         "category": "ENVIRONMENT_ERROR",
@@ -34,8 +34,18 @@ def agent_result(passed, sources):
         "sources": sources,
         "research_notes": "notes",
         "passed_review": passed,
-        "history": [{"verdict": verdict, "feedback": "risky step"}],
+        "history": [{"verdict": verdict, "feedback": "risky step", "checked_by": "ai"}],
+        "safety_issues": list(safety_issues),
     }
+
+
+def test_unsafe_fix_shows_a_clear_error(monkeypatch):
+    issue = "`setenforce 0` turns off SELinux"
+
+    page = run_ui(monkeypatch, lambda error, on_step: agent_result(False, [], [issue]))
+
+    assert any("Unsafe commands found" in e.value and "setenforce 0" in e.value for e in page.error)
+    assert not [w for w in page.warning if "did not pass" in w.value]
 
 
 def metrics(page):

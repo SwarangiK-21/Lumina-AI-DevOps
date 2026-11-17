@@ -36,6 +36,7 @@ class AgentState(TypedDict):
     generated_patch: str                                # Generated solution
     history: Annotated[list[dict], operator.add]        # One verdict/feedback per review
     passed_review: bool                                 # Reviewer approved the final solution
+    safety_issues: list[str]                            # Risky commands in the final solution
 
 
 def initial_state(error: str) -> AgentState:
@@ -47,5 +48,6 @@ def initial_state(error: str) -> AgentState:
         "sources": [],
         "generated_patch": "",
         "history": [],
-        "passed_review": False
+        "passed_review": False,
+        "safety_issues": [],
     }

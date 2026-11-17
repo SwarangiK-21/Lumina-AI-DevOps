@@ -28,11 +28,12 @@ class FakeStructured:
 
 
 class FakeLLM:
-    """Replays scripted reviews and numbers each generated fix."""
+    """Replays scripted reviews, and scripted fixes or numbered ones."""
 
-    def __init__(self, reviews, category="ENVIRONMENT_ERROR"):
+    def __init__(self, reviews, category="ENVIRONMENT_ERROR", patches=()):
         self.reviews = list(reviews)
         self.category = category
+        self.patches = list(patches)
         self.prompts = []
         self.fix_count = 0
 
@@ -42,7 +43,8 @@ class FakeLLM:
     def invoke(self, prompt):
         self.prompts.append(prompt)
         self.fix_count += 1
-        return AIMessage(content=[{"type": "text", "text": f"PATCH v{self.fix_count}"}])
+        text = self.patches.pop(0) if self.patches else f"PATCH v{self.fix_count}"
+        return AIMessage(content=[{"type": "text", "text": text}])
 
     def coder_prompts(self):
         return [p for p in self.prompts if "Senior DevOps Engineer" in p]
