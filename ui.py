@@ -8,6 +8,7 @@ import streamlit as st
 
 from agent.config import DAILY_QUOTA_MARKER, MAX_REVIEWS, MODEL_NAME, ConfigError
 from agent.graph import run_agent
+from agent.redact import describe
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -124,6 +125,9 @@ def show_result(result: dict, seconds: float) -> None:
     sources = result["sources"]
     passed = result["passed_review"]
 
+    if result["redactions"]:
+        st.info(f"**Masked before sending:** {describe(result['redactions'])}. Gemini and Tavily never saw them.")
+
     if result["safety_issues"]:
         issues = "\n".join(f"- {issue}" for issue in result["safety_issues"])
         st.error(f"**Unsafe commands found.** LUMINA could not remove them. Do not run:\n{issues}")
@@ -191,7 +195,10 @@ error_input = st.text_area(
     height=180,
 )
 
-st.caption("Sent to Gemini and Tavily, so remove passwords, keys and private data first.")
+st.caption(
+    "Sent to Gemini and Tavily. Common keys, tokens and passwords are masked first, "
+    "but remove any other private data yourself."
+)
 
 example_columns = st.columns(len(EXAMPLES))
 for column, (label, text) in zip(example_columns, EXAMPLES.items(), strict=True):

@@ -26,7 +26,7 @@ def run_ui(monkeypatch, run_agent):
     return page
 
 
-def agent_result(passed, sources, safety_issues=()):
+def agent_result(passed, sources, safety_issues=(), redactions=()):
     verdict = "CLEAN" if passed else "REDO"
     return {
         "category": "ENVIRONMENT_ERROR",
@@ -36,7 +36,16 @@ def agent_result(passed, sources, safety_issues=()):
         "passed_review": passed,
         "history": [{"verdict": verdict, "feedback": "risky step", "checked_by": "ai"}],
         "safety_issues": list(safety_issues),
+        "redactions": list(redactions),
     }
+
+
+def test_masked_secrets_are_reported(monkeypatch):
+    found = ["secret value", "secret value", "JWT"]
+
+    page = run_ui(monkeypatch, lambda error, on_step: agent_result(True, [], redactions=found))
+
+    assert any("2 secret values, 1 JWT" in i.value for i in page.info)
 
 
 def test_unsafe_fix_shows_a_clear_error(monkeypatch):

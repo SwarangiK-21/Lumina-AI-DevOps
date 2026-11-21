@@ -11,6 +11,7 @@ import sys
 import time
 
 from agent.graph import run_agent
+from agent.redact import describe
 
 SAMPLE_ERROR = "docker: Error response from daemon: Bind for 0.0.0.0:8000 failed: port 8000 is already allocated"
 
@@ -41,6 +42,9 @@ def main(argv: list[str]) -> int:
     print(f"  Passed review: {result['passed_review']}")
     print(f"  Sources: {len(result['sources'])}")
     print(f"  Time: {elapsed_time:.1f}s")
+
+    if result["redactions"]:
+        print(f"  Masked before sending: {describe(result['redactions'])}")
 
     for issue in result["safety_issues"]:
         print(f"  UNSAFE: {issue}")

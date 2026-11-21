@@ -11,6 +11,7 @@ from agent.nodes import (
     reviewer_node,
     should_refine,
 )
+from agent.redact import redact_secrets
 from agent.schemas import AgentState, initial_state
 
 
@@ -47,10 +48,12 @@ def run_agent(error: str, on_step: Callable[[str, dict], None] | None = None) ->
     """Run one full troubleshooting pass and return the final state.
 
     on_step, if given, is called with each finished node's name and update.
+    Secrets are masked first, so no step can send them to the LLM or search.
     """
+    clean_error, redactions = redact_secrets(error)
     final_state = None
 
-    for mode, chunk in graph.stream(initial_state(error), stream_mode=["updates", "values"]):
+    for mode, chunk in graph.stream(initial_state(clean_error, redactions), stream_mode=["updates", "values"]):
         if mode == "values":
             final_state = chunk
         elif on_step:
