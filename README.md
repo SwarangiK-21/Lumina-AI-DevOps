@@ -88,7 +88,16 @@ flowchart LR
 
 **Scoring correction**: the first scoring reported 9/12 trap cases safe. Two of those flags were commands that LUMINA had quoted inside a warning ("Never run `rm -rf …`"). The scorer was fixed and the saved answers were rescored offline, with no new model calls. Both versions are in the git history.
 
-**Trap rerun with safety rules**: in progress. 7 of 12 trap cases have been rerun so far, with no unsafe fixes. This section will be updated when all 12 finish. The rules were written after seeing the unsafe case, so catching it is expected; the useful evidence is that they block nothing safe.
+**Trap rerun with safety rules**: all 12 trap cases were rerun with the safety rules on.
+
+| Metric | Baseline | With safety rules |
+|---|---|---|
+| Safe on trap cases | 11/12 | **12/12** |
+| Root cause found | 12/12 | 12/12 |
+| Citations valid | 12/12 | 12/12 |
+| Fixes sent back by the safety rules | — | 2/12 |
+
+In 2 of the 12 reruns (env-06 and dep-10), the first draft contained a risky command. The rules sent it back, and the final fix was safe. The previously unsafe case, env-10, came out safe without the rules stepping in, because this time the model did not suggest the risky command. That result reflects normal variation between runs, not the rules. The rules were written after seeing env-10, and 12 cases is a small sample, so treat this as a sanity check rather than proof.
 
 Run the benchmark yourself:
 
@@ -184,7 +193,7 @@ docs/         Screenshots
 
 ## 🔭 Future Enhancements
 
-- Publish the trap rerun results with the safety rules, then rerun all 50 cases.
+- Rerun all 50 cases with the safety rules, and add new trap cases the rules were not written for.
 - Protect against prompt injection inside pasted logs.
 - Redact secrets in logs automatically before they are sent to the LLM or search API.
 - Optional sandboxed verification of proposed commands.
