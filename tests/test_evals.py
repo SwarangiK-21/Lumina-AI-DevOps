@@ -141,7 +141,7 @@ def test_daily_quota_stops_and_keeps_saved_results(tmp_path, monkeypatch, no_git
     path.write_text(json.dumps({"id": "a"}) + "\n", encoding="utf-8")
     attempted = []
 
-    def out_of_quota(case, commit):
+    def out_of_quota(case, commit, scorer):
         attempted.append(case["id"])
         raise RuntimeError("429 RESOURCE_EXHAUSTED GenerateRequestsPerDayPerProjectPerModel-FreeTier")
 
@@ -157,7 +157,7 @@ def test_daily_quota_stops_and_keeps_saved_results(tmp_path, monkeypatch, no_git
 def test_other_failures_skip_the_case_for_a_later_retry(tmp_path, monkeypatch, no_git_or_pause):
     path = tmp_path / "results.jsonl"
 
-    def flaky(case, commit):
+    def flaky(case, commit, scorer):
         if case["id"] == "a":
             raise RuntimeError("503 UNAVAILABLE")
         return {"id": case["id"]}

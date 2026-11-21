@@ -8,6 +8,7 @@ Usage:
     python -m evals.run                 # Run every unfinished case
     python -m evals.run --limit 3       # Run at most 3 cases
     python -m evals.run --traps         # Run only trap cases, saved to traps.jsonl
+    python -m evals.run --injection     # Run prompt-injection cases, saved by defence on or off
 """
 
 import argparse
@@ -21,6 +22,9 @@ from pathlib import Path
 
 from agent.config import DAILY_QUOTA_MARKER, MODEL_NAME
 from agent.graph import run_agent
+from agent.injection import defence_on
+from evals.injection import INJECTION_CASES_PATH, score_injection
+from evals.injection import results_path as injection_results_path
 from evals.score import score_case
 
 CASES_PATH = Path(__file__).parent / "cases.jsonl"
@@ -55,7 +59,7 @@ def current_commit() -> str:
     return finished.stdout.strip() or "unknown"
 
 
-def run_case(case: dict, commit: str) -> dict:
+def run_case(case: dict, commit: str, scorer=score_case) -> dict:
     """Run one case and return its saved record."""
     start_time = time.time()
     result = run_agent(case["input"])
@@ -66,15 +70,22 @@ def run_case(case: dict, commit: str) -> dict:
         "trap": case.get("trap", False),
         "model": MODEL_NAME,
         "commit": commit,
+        "injection_defence": defence_on(),
         "finished_at": datetime.now(UTC).isoformat(timespec="seconds"),
         "seconds": round(time.time() - start_time, 1),
         "predicted_category": result["category"],
         "solution": result["generated_patch"],
-        **score_case(case, result),
+        **scorer(case, result),
     }
 
 
-def run_benchmark(cases: list[dict], results_path: Path, limit: int | None = None, pause: float = 5) -> int:
+def run_benchmark(
+    cases: list[dict],
+    results_path: Path,
+    limit: int | None = None,
+    pause: float = 5,
+    scorer=score_case,
+) -> int:
     """Run unfinished cases and return how many finished in this call."""
     finished_ids = {record["id"] for record in load_jsonl(results_path)}
     pending = [case for case in cases if case["id"] not in finished_ids][:limit]
@@ -86,7 +97,7 @@ def run_benchmark(cases: list[dict], results_path: Path, limit: int | None = Non
 
     for case in pending:
         try:
-            record = run_case(case, commit)
+            record = run_case(case, commit, scorer)
 
         except Exception as e:  # noqa: BLE001 - one bad case must not lose the run
             if DAILY_QUOTA_MARKER in str(e):
@@ -111,12 +122,20 @@ def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description="Run the LUMINA benchmark.")
     parser.add_argument("--limit", type=int, help="Maximum cases to run now")
     parser.add_argument("--traps", action="store_true", help="Run only the trap cases")
+    parser.add_argument("--injection", action="store_true", help="Run the prompt-injection cases")
     parser.add_argument("--output", type=Path, help="Results file")
     args = parser.parse_args(argv)
 
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     logging.getLogger("httpx").setLevel(logging.WARNING)
+
+    if args.injection:
+        logger.info("Injection defence is %s", "on" if defence_on() else "off")
+        cases = load_jsonl(INJECTION_CASES_PATH)
+        output = args.output or injection_results_path(defence_on())
+        run_benchmark(cases, output, args.limit, scorer=score_injection)
+        return 0
 
     cases = select_cases(load_jsonl(CASES_PATH), args.traps)
     output = args.output or (TRAPS_PATH if args.traps else RESULTS_PATH)

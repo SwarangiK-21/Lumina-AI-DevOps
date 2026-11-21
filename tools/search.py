@@ -7,6 +7,7 @@ from functools import lru_cache
 from langchain_tavily import TavilySearch
 
 from agent.config import MAX_QUERY_CHARS, MAX_SOURCES
+from agent.injection import defence_on, find_injection
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +62,16 @@ def safe_search(query: str) -> tuple[str, list[dict]]:
 
         if not results:
             return "No web research available: search returned no results.", []
+
+        # A web page can hide instructions for the model, so drop any that do
+        if defence_on():
+            kept = [r for r in results if not find_injection(f"{r.get('title', '')}\n{r.get('content', '')}")]
+            if len(kept) < len(results):
+                logger.warning("Dropped %d search results that contain instructions", len(results) - len(kept))
+            results = kept
+
+        if not results:
+            return "No web research available: every result was dropped.", []
 
         research_text = "RESEARCH FINDINGS:\n\n"
         sources = []
