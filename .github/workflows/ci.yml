@@ -26,3 +26,37 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: docker build -t lumina .
+
+      # No API keys are needed: the app starts and renders without them
+      - name: Start the container and wait for the app
+        run: |
+          docker run -d --name lumina -p 8501:8501 lumina
+          for attempt in $(seq 1 30); do
+            curl -fsS http://localhost:8501/_stcore/health && exit 0
+            sleep 2
+          done
+          echo "The app did not become healthy within 60 seconds" && exit 1
+
+      - name: Serve the page and render the UI inside the container
+        run: |
+          curl -fsS http://localhost:8501/ | grep -qi "<title>"
+          docker exec lumina python -c "
+          from streamlit.testing.v1 import AppTest
+          page = AppTest.from_file('ui.py', default_timeout=60).run()
+          assert not page.exception, page.exception
+          assert page.button(key='analyze_button')
+          print('UI rendered with', len(page.button), 'buttons')
+          "
+
+      - name: Mask a secret inside the container
+        run: |
+          docker exec lumina python -c "
+          from agent.redact import redact_secrets
+          masked, found = redact_secrets('POSTGRES_PASSWORD=' + 'hunter2' + 'Prod!')
+          assert 'hunter2' not in masked and found == ['secret value'], masked
+          print(masked)
+          "
+
+      - name: Show container logs
+        if: always()
+        run: docker logs lumina || true
