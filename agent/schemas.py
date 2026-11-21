@@ -38,13 +38,19 @@ class AgentState(TypedDict):
     passed_review: bool                                 # Reviewer approved the final solution
     safety_issues: list[str]                            # Risky commands in the final solution
     redactions: list[str]                               # Kind of each secret masked in the input
+    injection_warnings: list[str]                       # Instruction-like phrases found in the input
 
 
-def initial_state(error: str, redactions: list[str] | None = None) -> AgentState:
+def initial_state(
+    error: str,
+    redactions: list[str] | None = None,
+    injection_warnings: list[str] | None = None,
+) -> AgentState:
     """Build the starting state for one run. error must already be redacted."""
     return {
         "input": error,
         "redactions": list(redactions or []),
+        "injection_warnings": list(injection_warnings or []),
         "category": "",
         "research_notes": "",
         "sources": [],

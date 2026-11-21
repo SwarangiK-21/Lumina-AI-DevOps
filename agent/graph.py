@@ -4,6 +4,7 @@ from collections.abc import Callable
 
 from langgraph.graph import END, START, StateGraph
 
+from agent.injection import defence_on, find_injection
 from agent.nodes import (
     classifier_node,
     coder_node,
@@ -51,9 +52,11 @@ def run_agent(error: str, on_step: Callable[[str, dict], None] | None = None) ->
     Secrets are masked first, so no step can send them to the LLM or search.
     """
     clean_error, redactions = redact_secrets(error)
+    warnings = find_injection(clean_error) if defence_on() else []
+    state = initial_state(clean_error, redactions, warnings)
     final_state = None
 
-    for mode, chunk in graph.stream(initial_state(clean_error, redactions), stream_mode=["updates", "values"]):
+    for mode, chunk in graph.stream(state, stream_mode=["updates", "values"]):
         if mode == "values":
             final_state = chunk
         elif on_step:

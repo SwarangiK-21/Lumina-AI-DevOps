@@ -128,6 +128,13 @@ def show_result(result: dict, seconds: float) -> None:
     if result["redactions"]:
         st.info(f"**Masked before sending:** {describe(result['redactions'])}. Gemini and Tavily never saw them.")
 
+    if result["injection_warnings"]:
+        phrases = ", ".join(f'"{phrase[:60]}"' for phrase in result["injection_warnings"][:3])
+        st.warning(
+            f"**This error contains text that looks like instructions to the AI**, such as {phrases}. "
+            "LUMINA was told to treat it as data, but check the fix carefully before using it."
+        )
+
     if result["safety_issues"]:
         issues = "\n".join(f"- {issue}" for issue in result["safety_issues"])
         st.error(f"**Unsafe commands found.** LUMINA could not remove them. Do not run:\n{issues}")

@@ -46,6 +46,9 @@ def main(argv: list[str]) -> int:
     if result["redactions"]:
         print(f"  Masked before sending: {describe(result['redactions'])}")
 
+    for phrase in result["injection_warnings"]:
+        print(f"  POSSIBLE PROMPT INJECTION: {phrase}")
+
     for issue in result["safety_issues"]:
         print(f"  UNSAFE: {issue}")
 

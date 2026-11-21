@@ -3,12 +3,25 @@
 import logging
 
 from agent.config import MAX_FEEDBACK_QUERY_CHARS, MAX_REVIEWS
+from agent.injection import DATA_RULE, REVIEW_RULE, defence_on, fence
 from agent.llm import call_llm, call_llm_structured
 from agent.safety import find_risky_commands
 from agent.schemas import AgentState, Classification, Review
 from tools.search import build_search_query, safe_search
 
 logger = logging.getLogger(__name__)
+
+
+def untrusted(state: AgentState) -> tuple[str, str, str]:
+    """Return the data rule, error and research, fenced when the defence is on."""
+    if not defence_on():
+        return "", state["input"], state["research_notes"]
+
+    return (
+        f"{DATA_RULE}\n\n",
+        fence("untrusted_error", state["input"]),
+        fence("untrusted_research", state["research_notes"]),
+    )
 
 
 def classifier_node(state: AgentState) -> dict:
@@ -23,6 +36,7 @@ def classifier_node(state: AgentState) -> dict:
     - PERMISSION_ERROR: Access/auth issues
     """
     logger.info("Step 1/4: classifying error")
+    rule, error, _ = untrusted(state)
 
     prompt = f"""You are an expert DevOps error classifier.
 
@@ -33,8 +47,8 @@ Categorize this error into ONE of these types:
 - DEPENDENCY_ERROR (Missing packages, version conflicts)
 - PERMISSION_ERROR (Access denied, authentication issues)
 
-ERROR MESSAGE:
-{state['input']}"""
+{rule}ERROR MESSAGE:
+{error}"""
 
     category = call_llm_structured(Classification, prompt).category
     logger.info("Error category: %s", category)
@@ -76,13 +90,15 @@ REVIEWER FEEDBACK (you must address this):
 {state['history'][-1]['feedback']}
 """
 
+    rule, error, research = untrusted(state)
+
     prompt = f"""You are a Senior DevOps Engineer with 10+ years experience.
 
-ERROR CATEGORY: {state['category']}
-ERROR MESSAGE: {state['input']}
+{rule}ERROR CATEGORY: {state['category']}
+ERROR MESSAGE: {error}
 
 RESEARCH DATA:
-{state['research_notes']}
+{research}
 {revision}
 Generate a comprehensive fix with the following sections:
 
@@ -131,15 +147,18 @@ def reviewer_node(state: AgentState) -> dict:
             "safety_issues": issues,
         }
 
+    rule, error, research = untrusted(state)
+    hidden_check, criteria_count = (f"\n{REVIEW_RULE}", "five") if defence_on() else ("", "four")
+
     prompt = f"""You are a Senior QA & Security Engineer.
 
 Review this fix for safety and correctness.
 
-ORIGINAL ERROR:
-{state['input']}
+{rule}ORIGINAL ERROR:
+{error}
 
 RESEARCH DATA:
-{state['research_notes']}
+{research}
 
 PROPOSED FIX:
 {state['generated_patch']}
@@ -148,9 +167,9 @@ Evaluate on these criteria:
 1. SAFETY: Does it introduce security vulnerabilities?
 2. CORRECTNESS: Does it actually fix the root cause?
 3. COMPLETENESS: Does it handle edge cases?
-4. BEST_PRACTICES: Does it follow industry standards?
+4. BEST_PRACTICES: Does it follow industry standards?{hidden_check}
 
-Use verdict CLEAN only if the fix meets all four criteria. Otherwise use
+Use verdict CLEAN only if the fix meets all {criteria_count} criteria. Otherwise use
 verdict REDO and say exactly what must change."""
 
     review = call_llm_structured(Review, prompt)
