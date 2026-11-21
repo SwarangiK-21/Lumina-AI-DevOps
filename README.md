@@ -13,7 +13,7 @@
 
 LUMINA turns a pasted DevOps or software error into a cited fix proposal. It classifies the error, searches the web, drafts a fix, checks the fix's commands against fixed safety rules, and has a second AI step review it. If either check requests changes, the feedback goes back into the next attempt.
 
-LUMINA only proposes fixes. It does not run them or change your systems.
+LUMINA only proposes fixes. It does not run them or change your systems. Before anything leaves your machine, it masks keys, tokens and passwords in the pasted text.
 
 <p align="center"><img src="docs/images/ui.jpg" alt="LUMINA interface with a reviewed fix" width="800"></p>
 
@@ -39,6 +39,7 @@ When a build, deployment or runtime error appears, developers paste it into a se
 - 🔁 **Review loop**: A reviewer step returns `CLEAN` or `REDO`. On `REDO`, the next attempt receives the previous fix and the feedback, for up to 3 reviews.
 - 🛡️ **Safety rules**: Before the AI review, 13 fixed rules check the fix's commands for known dangers, such as turning off TLS checks, `chmod 777` or piping a download into `bash`. A match sends the fix back with the reason. If it never goes away, the UI shows the commands in red. The benchmark found the AI reviewer approving one such command, which is why these rules exist.
 - ⏱️ **Live progress**: The interface lights up each step (Classify, Research, Draft, Review) as it finishes and shows when a fix is being reworked.
+- 🔒 **Secret redaction**: Before any model or search call, 11 rules mask AWS keys, GitHub, Slack, Stripe and LLM tokens, Google API keys, JWTs, bearer tokens, private keys, passwords in URLs and settings like `POSTGRES_PASSWORD=`. Only the secret is replaced, such as `[REDACTED URL PASSWORD]`, so the error stays readable, and the UI lists what was masked.
 - 🧾 **Honest results**: The UI shows whether the fix passed review and how many sources were used, and warns you when either is missing. Results can be downloaded as Markdown.
 
 <p align="center"><img src="docs/images/result.jpg" alt="A proposed fix with cited sources" width="800"></p>
@@ -111,6 +112,20 @@ python -m evals.rescore              # Reapply text rules to saved answers, no m
 
 Runs are resumable. Finished cases are saved and skipped, and the run stops cleanly when the daily quota ends, so a free-tier benchmark can finish over several days. Compare results only when they share a model and code version.
 
+**Secret redaction**: `evals/redaction_cases.jsonl` holds 35 realistic logs: 20 with secrets such as cloud keys, tokens, database URLs and `.env` contents, and 15 clean logs that look similar, such as `password authentication failed`, commit hashes, image digests and `max_tokens: 4096`. It needs no API calls.
+
+| Check | Result |
+|---|---|
+| Logs with every secret masked | 20/20 |
+| Clean logs left unchanged | 15/15 |
+| Benchmark errors changed | 0/50 |
+
+The first version wrongly masked the word "secrets" in `failed to create secret: secrets "db-creds" already exists`, so values in `name: value` form now need at least 8 characters. These cases were written alongside the rules, so they show the rules work as designed, not how they handle secret formats they do not know. The fake secrets are assembled in `evals/redaction.py` so they never appear whole in the repository.
+
+```bash
+python -m evals.redaction            # Exits with an error if any check fails
+```
+
 ---
 
 ## 🚀 Getting Started
@@ -157,7 +172,7 @@ The tests use fake LLM and search services, so they need no API keys and make no
 ```text
 agent/        Workflow, nodes, safety rules, schemas and Gemini access
 tools/        Web search
-evals/        Benchmark cases, runner, scoring, rescoring, reports and results
+evals/        Benchmark and redaction cases, runner, scoring, rescoring, reports and results
 cli.py        Command line entry point
 ui.py         Streamlit interface
 assets/       Interface stylesheet
@@ -174,7 +189,7 @@ docs/         Screenshots
 - The safety rules only know the dangers they list. A dangerous command they do not cover can still pass if the AI reviewer misses it.
 - The benchmark uses hand-written cases and keyword rules, so its scores are a rough guide, not proof of correctness.
 - Each run makes 4 to 7 Gemini requests. A free-tier key with a limit of 20 requests a day allows only a few runs.
-- Pasted logs are sent to Gemini and Tavily. Remove passwords, keys and private data first.
+- Pasted logs are sent to Gemini and Tavily. Common secrets are masked first, but unfamiliar secret formats, passwords shorter than 8 characters in `name: value` form, and other private data such as names, hostnames or IP addresses are not. Remove those yourself.
 - Logs are not yet protected against prompt injection.
 - LUMINA cannot see your code, config or live systems.
 
@@ -195,7 +210,6 @@ docs/         Screenshots
 
 - Rerun all 50 cases with the safety rules, and add new trap cases the rules were not written for.
 - Protect against prompt injection inside pasted logs.
-- Redact secrets in logs automatically before they are sent to the LLM or search API.
 - Optional sandboxed verification of proposed commands.
 
 ## 🤝 Contributing
